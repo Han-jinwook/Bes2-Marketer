@@ -6,22 +6,43 @@ Bes2 Marketer - Configuration
 import os
 from dotenv import load_dotenv
 
-# .env 파일 로드
+# .env 파일 로드 (로컬 개발용)
 load_dotenv()
+
+
+def get_secret(key: str, default: str = "") -> str:
+    """
+    환경 변수 또는 Streamlit Secrets에서 값 가져오기
+    Streamlit Cloud 배포 시 st.secrets 사용, 로컬에서는 .env 사용
+    """
+    # 먼저 환경 변수에서 확인 (로컬 .env)
+    value = os.getenv(key, "")
+    if value:
+        return value
+    
+    # Streamlit Cloud secrets에서 확인
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    
+    return default
 
 
 class Config:
     """앱 설정 클래스"""
     
     # Supabase
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_URL: str = get_secret("SUPABASE_URL")
+    SUPABASE_KEY: str = get_secret("SUPABASE_KEY")
     
     # Google Gemini
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_API_KEY: str = get_secret("GEMINI_API_KEY")
     
     # YouTube Data API
-    YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
+    YOUTUBE_API_KEY: str = get_secret("YOUTUBE_API_KEY")
     
     # 검색 키워드 (Bes2 앱 관련)
     SEARCH_KEYWORDS: list[str] = [
