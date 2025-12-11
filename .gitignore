@@ -1,0 +1,26 @@
+# 환경 변수 (API 키 보호!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로컬 저장 파일
+saved_keywords.json
+
+# Streamlit
+.streamlit/secrets.toml
+
