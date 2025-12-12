@@ -43,6 +43,10 @@ class Config:
     
     # YouTube Data API
     YOUTUBE_API_KEY: str = get_secret("YOUTUBE_API_KEY")
+
+    # 이메일 설정
+    SENDER_EMAIL: str = get_secret("SENDER_EMAIL")
+    SENDER_PASSWORD: str = get_secret("SENDER_PASSWORD")
     
     # 검색 키워드 (Bes2 앱 관련)
     SEARCH_KEYWORDS: list[str] = [

@@ -622,20 +622,44 @@ with tab2:
                 st.markdown("---")
                 
                 # 버튼들
-                col1, col2, col3 = st.columns([2, 2, 1])
+                col1, col2, col3 = st.columns([1.5, 1.5, 1])
                 
                 with col1:
                     full_email = f"제목: {email_subject}\n\n{email_body}"
-                    st.code(full_email[:100] + "...", language=None)
-                    
-                    if st.button("📋 전체 복사하기", type="primary", use_container_width=True, key="copy_email"):
+                    if st.button("📋 전체 복사", type="secondary", use_container_width=True, key="copy_email"):
                         st.code(full_email, language=None)
-                        st.success("👆 위 내용을 드래그해서 복사하세요!")
+                        st.success("내용이 복사되었습니다!")
                 
                 with col2:
-                    if st.button("📋 본문만 복사", use_container_width=True, key="copy_body"):
-                        st.code(email_body, language=None)
-                        st.success("👆 위 내용을 드래그해서 복사하세요!")
+                    # 이메일 발송 버튼
+                    from email_service import emailer
+                    
+                    if st.button("🚀 이메일 전송", type="primary", use_container_width=True, key="send_email"):
+                        # 수신자 이메일 확인
+                        if not email_addr or "@" not in email_addr:
+                            st.error("올바른 수신자 이메일 주소가 필요합니다.")
+                        # 발신자 설정 확인
+                        elif not config.SENDER_EMAIL or not config.SENDER_PASSWORD:
+                            st.error("발신자 이메일 설정이 없습니다. .env 파일을 확인하세요.")
+                        else:
+                            with st.spinner(f"📨 {channel_name}님께 메일 전송 중..."):
+                                success = emailer.send_email(
+                                    to_email=email_addr,
+                                    subject=email_subject,
+                                    body=email_body
+                                )
+                                
+                                if success:
+                                    st.success(f"✅ {channel_name}님께 메일을 성공적으로 보냈습니다!")
+                                    st.balloons()
+                                    
+                                    # DB 상태 업데이트 및 초안 삭제/보관
+                                    db.update_draft_status(draft_data.get("db_id", ""), "sent")
+                                    # 화면 갱신을 위해 rerun
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("메일 전송에 실패했습니다. 로그를 확인하세요.")
                 
                 with col3:
                     if st.button("🔄 재생성", use_container_width=True, key="regen_email"):
