@@ -419,9 +419,24 @@ class AICopywriter:
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
+        
+        # 사용 가능한 모델 동적 탐색
+        model_name = "models/gemini-pro"  # 기본값
+        try:
+            print("🤖 Finding available Gemini models...")
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    if "gemini" in m.name:
+                        model_name = m.name
+                        print(f"✅ Found supported model: {model_name}")
+                        break
+        except Exception as e:
+            print(f"⚠️ Model discovery failed, using default: {e}")
+
         self.model = genai.GenerativeModel(
-            model_name="gemini-pro"
+            model_name=model_name
         )
+        print(f"🚀 AICopywriter initialized with model: {model_name}")
     
     def generate_email(
         self,
