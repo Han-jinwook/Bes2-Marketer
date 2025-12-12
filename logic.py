@@ -41,13 +41,13 @@ class YouTubeHunter:
         language: str = "ko"
     ) -> list[dict]:
         """
-        키워드로 YouTube 영상 검색
+        키워드로 YouTube 영상 검색 (Strict Mode: Space=AND)
         
         Args:
-            keyword: 검색 키워드
-            max_results: 최대 결과 수 (기본 10, 최대 50)
+            keyword: 검색 키워드 (띄어쓰기는 AND 조건으로 처리)
+            max_results: 최대 결과 수
             published_after_days: 최근 N일 이내 영상만 검색
-            order: 정렬 기준 (relevance, date, viewCount, rating)
+            order: 정렬 기준
             language: 검색 언어
             
         Returns:
@@ -59,27 +59,55 @@ class YouTubeHunter:
         ).isoformat() + "Z"
         
         try:
+            # 1. YouTube API로 1차 검색 (Broad Match)
+            # API는 기본적으로 OR/AND가 섞인 관련성 검색을 하므로, 
+            # 넉넉하게 가져온 뒤 파이썬에서 정밀 필터링합니다.
+            fetch_limit = min(max_results * 3, 50)  # 필터링을 고려해 3배수 요청
+            
             search_response = self.youtube.search().list(
                 q=keyword,
                 part="snippet",
                 type="video",
-                maxResults=min(max_results, 50),
+                maxResults=fetch_limit,
                 order=order,
                 publishedAfter=published_after,
                 relevanceLanguage=language,
-                regionCode="KR",  # 한국 지역 영상만
-                videoCaption="closedCaption"  # 자막 있는 영상 우선
+                regionCode="KR",
+                videoCaption="closedCaption"
             ).execute()
             
-            # 한국어 영상만 필터링 (제목에 한글 포함 여부 체크)
+            # 2. 정밀 필터링 (Space = AND, Korean Only)
             import re
             def has_korean(text):
                 return bool(re.search(r'[가-힣]', text))
             
-            filtered_items = [
-                item for item in search_response.get("items", [])
-                if has_korean(item["snippet"]["title"])
-            ]
+            required_terms = keyword.split()
+            filtered_items = []
+            
+            for item in search_response.get("items", []):
+                snippet = item["snippet"]
+                title = snippet["title"]
+                description = snippet["description"]
+                
+                # (1) 한국어 포함 여부 체크
+                if not has_korean(title):
+                    continue
+                
+                # (2) AND 조건 체크 (모든 단어가 제목이나 설명에 있어야 함)
+                # 대소문자 무시를 위해 lower() 사용
+                search_context = (title + " " + description).lower()
+                is_match = True
+                
+                for term in required_terms:
+                    if term.lower() not in search_context:
+                        is_match = False
+                        break
+                
+                if is_match:
+                    filtered_items.append(item)
+                    
+            # 요청한 개수만큼 자르기
+            filtered_items = filtered_items[:max_results]
             search_response["items"] = filtered_items
             
             videos = []

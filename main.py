@@ -213,7 +213,7 @@ with st.sidebar:
     keywords_input = st.text_area(
         "🔍 검색 키워드",
         value=st.session_state.saved_keywords,
-        help="쉼표(,)로 구분하여 여러 키워드 입력",
+        help="쉼표(,)는 OR, 띄어쓰기는 AND 조건입니다. 예: '사진 정리, 용량 부족' -> ('사진' AND '정리') 또는 ('용량' AND '부족')",
         height=100
     )
     
