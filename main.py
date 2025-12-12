@@ -640,6 +640,10 @@ with tab2:
                     # 이메일 발송 버튼
                     from email_service import emailer
                     
+                    # 테스트 모드 알림
+                    if config.TEST_MODE:
+                        st.warning(f"🧪 테스트 모드: 수신자가 {config.TEST_EMAIL}로 변경됩니다.")
+                    
                     if st.button("🚀 이메일 전송", type="primary", use_container_width=True, key="send_email"):
                         # 수신자 이메일 확인
                         if not email_addr or "@" not in email_addr:
