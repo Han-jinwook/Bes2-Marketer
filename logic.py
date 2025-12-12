@@ -420,12 +420,15 @@ class AICopywriter:
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
         
-        # Bes2 Marketer를 위한 최적의 모델: Gemini 1.5 Flash
-        # 이유 1: 긴 영상 자막(Transcript)을 한 번에 처리하는 긴 컨텍스트 윈도우 (1M)
-        # 이유 2: 마케팅 초안 생성에 충분한 한국어 작문 실력
-        # 이유 3: 가장 빠르고 경제적임 (Underdog 정신에 부합)
+    def __init__(self):
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        
+        # [긴급 수정]
+        # 사용자 환경의 가용 모델 리스트에서 'gemini-1.5-flash'가 아닌
+        # 'models/gemini-flash-latest'가 확인되었습니다.
+        # 따라서 확인된 안전한 모델명으로 교체합니다.
         self.model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="models/gemini-flash-latest",
             system_instruction=self.SYSTEM_PROMPT
         )
     
