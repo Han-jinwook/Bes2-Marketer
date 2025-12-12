@@ -337,10 +337,11 @@ with st.sidebar:
 # 메인 탭
 # =============================================
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📹 영상 리스트 & 분석",
     "✉️ 이메일 발송 관리",
-    "💬 댓글/커뮤니티 마케팅"
+    "💬 댓글/커뮤니티 마케팅",
+    "🔧 시스템 진단"
 ])
 
 # =============================================
@@ -886,6 +887,72 @@ with tab3:
                     if st.button("📋 커뮤니티 글 복사", use_container_width=True, key="copy_community"):
                         st.code(community_text, language=None)
                         st.success("👆 위 내용을 드래그해서 복사하세요!")
+
+# =============================================
+# 탭 4: 시스템 진단 (Debug)
+# =============================================
+
+with tab4:
+    st.markdown("### 🔧 시스템 상태 및 로그")
+    st.info("이 화면을 캡처해서 개발자에게 보여주세요.")
+    
+    import google.generativeai as genai
+    import importlib.metadata
+    
+    # 1. 라이브러리 버전 확인
+    try:
+        version = importlib.metadata.version("google-generativeai")
+        st.write(f"**Google Generative AI Version:** `{version}`")
+    except:
+        st.error("라이브러리 버전을 확인할 수 없습니다.")
+        
+    st.markdown("---")
+    
+    # 2. 사용 가능한 모델 리스트 확인
+    st.markdown("#### 🤖 사용 가능한 Gemini 모델 리스트")
+    if st.button("모델 리스트 조회"):
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            models = list(genai.list_models())
+            
+            model_data = []
+            for m in models:
+                model_data.append({
+                    "name": m.name,
+                    "supported_methods": m.supported_generation_methods,
+                    "description": m.description
+                })
+            
+            st.dataframe(model_data)
+            
+            # gemini-pro 존재 여부 확인
+            has_pro = any("gemini-pro" in m.name for m in models)
+            has_flash = any("gemini-1.5-flash" in m.name for m in models)
+            
+            if has_pro:
+                st.success("✅ `gemini-pro` 모델이 발견되었습니다.")
+            if has_flash:
+                st.success("✅ `gemini-1.5-flash` 모델이 발견되었습니다.")
+                
+        except Exception as e:
+            st.error(f"모델 리스트 조회 실패: {e}")
+            
+    st.markdown("---")
+    
+    # 3. 연결 테스트
+    st.markdown("#### ⚡ API 연결 테스트")
+    test_model_name = st.text_input("테스트할 모델명", value="models/gemini-pro")
+    
+    if st.button("테스트 실행"):
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            model = genai.GenerativeModel(test_model_name)
+            response = model.generate_content("Hello, are you working?")
+            st.success("✅ 응답 성공!")
+            st.write(response.text)
+        except Exception as e:
+            st.error(f"❌ 테스트 실패: {e}")
+
 
 # =============================================
 # 푸터
