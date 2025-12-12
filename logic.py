@@ -420,8 +420,7 @@ class AICopywriter:
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
         self.model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=self.SYSTEM_PROMPT
+            model_name="gemini-pro"
         )
     
     def generate_email(
@@ -448,7 +447,12 @@ class AICopywriter:
         # 콘텐츠가 너무 길면 앞부분만 사용
         content_preview = video_content[:3000] if video_content else "내용 없음"
         
-        prompt = f"""다음 유튜버에게 Bes2 앱을 소개하는 진심 어린 제안 이메일을 작성해줘.
+        # 시스템 프롬프트와 유저 프롬프트 결합
+        prompt = f"""{self.SYSTEM_PROMPT}
+
+---
+[작업 요청]
+다음 유튜버에게 Bes2 앱을 소개하는 진심 어린 제안 이메일을 작성해줘.
 
 [타겟 유튜버 정보]
 - 채널명: {channel_name}
@@ -506,7 +510,12 @@ class AICopywriter:
         """
         content_preview = video_content[:2000] if video_content else "내용 없음"
         
-        prompt = f"""다음 유튜브 영상에 달 댓글을 작성해줘. 광고가 아니라 '진짜 도움 되는 정보 공유'처럼 보여야 해.
+        # 시스템 프롬프트와 유저 프롬프트 결합
+        prompt = f"""{self.SYSTEM_PROMPT}
+
+---
+[작업 요청]
+다음 유튜브 영상에 달 댓글을 작성해줘. 광고가 아니라 '진짜 도움 되는 정보 공유'처럼 보여야 해.
 
 [영상 정보]
 - 제목: {video_title}
