@@ -496,7 +496,8 @@ with tab1:
                                         video_db_id = existing["id"]
                                     
                                     # 초안 저장
-                                    db.create_draft(
+                                    # 초안 저장
+                                    email_draft = db.create_draft(
                                         draft_type="email",
                                         content=email,
                                         video_id=video_db_id,
@@ -508,6 +509,10 @@ with tab1:
                                         video_id=video_db_id,
                                         lead_id=lead_id
                                     )
+                                    
+                                    # 세션에 DB ID 업데이트
+                                    if video["video_id"] in st.session_state.generated_drafts:
+                                        st.session_state.generated_drafts[video["video_id"]]["db_id"] = email_draft["id"]
                                 
                                 st.success("✅ 분석 완료! 탭 2, 3에서 확인하세요.")
                                 
@@ -547,6 +552,7 @@ with tab2:
                                 "video_id": video["video_id"]
                             },
                             "email": draft["content"],
+                            "db_id": draft["id"],  # DB ID 저장 (중요)
                             "channel_info": {
                                 "email": lead.get("email"),
                                 "subscriber_count": lead.get("subscriber_count", 0)
@@ -653,8 +659,13 @@ with tab2:
                                     st.success(f"✅ {channel_name}님께 메일을 성공적으로 보냈습니다!")
                                     st.balloons()
                                     
-                                    # DB 상태 업데이트 및 초안 삭제/보관
-                                    db.update_draft_status(draft_data.get("db_id", ""), "sent")
+                                    # DB 상태 업데이트 (ID가 있을 경우에만)
+                                    if draft_data.get("db_id"):
+                                        try:
+                                            db.update_draft_status(draft_data["db_id"], "sent")
+                                        except Exception as e:
+                                            print(f"Status update error: {e}")
+                                            st.warning("메일은 전송되었으나, DB 상태 업데이트에 실패했습니다.")
                                     # 화면 갱신을 위해 rerun
                                     time.sleep(1)
                                     st.rerun()
