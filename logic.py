@@ -110,6 +110,9 @@ class YouTubeHunter:
             filtered_items = filtered_items[:max_results]
             search_response["items"] = filtered_items
             
+            # 정규식 모듈 (상단에 import 되어 있다고 가정, 없으면 추가)
+            import re
+            
             videos = []
             for item in search_response.get("items", []):
                 video_id = item["id"]["videoId"]
@@ -118,6 +121,14 @@ class YouTubeHunter:
                 # 영상 상세 정보 가져오기
                 video_details = self._get_video_details(video_id)
                 
+                # 채널 상세 정보 가져오기 (설명란에서 이메일 찾기 위함)
+                channel_info = self._get_channel_details(snippet["channelId"])
+                
+                # 이메일 추출 (1순위: 영상 설명, 2순위: 채널 설명)
+                found_email = self._extract_email_from_text(snippet["description"])
+                if not found_email:
+                    found_email = self._extract_email_from_text(channel_info.get("description", ""))
+
                 videos.append({
                     "video_id": video_id,
                     "title": snippet["title"],
@@ -130,7 +141,11 @@ class YouTubeHunter:
                     "view_count": video_details.get("view_count", 0),
                     "like_count": video_details.get("like_count", 0),
                     "comment_count": video_details.get("comment_count", 0),
-                    "search_keyword": keyword
+                    "search_keyword": keyword,
+                    "channel_info": {
+                        "subscriber_count": channel_info.get("subscriber_count", 0),
+                        "email": found_email  # 추출된 이메일 추가
+                    }
                 })
             
             return videos
@@ -138,6 +153,33 @@ class YouTubeHunter:
         except Exception as e:
             print(f"YouTube search error: {e}")
             return []
+    
+    def _extract_email_from_text(self, text: str) -> Optional[str]:
+        """텍스트에서 이메일 패턴 추출"""
+        if not text:
+            return None
+        # 이메일 정규식 (간단 버전)
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        match = re.search(email_pattern, text)
+        return match.group(0) if match else None
+
+    def _get_channel_details(self, channel_id: str) -> dict:
+        """채널 상세 정보(설명, 구독자 수) 가져오기"""
+        try:
+            response = self.youtube.channels().list(
+                part="snippet,statistics",
+                id=channel_id
+            ).execute()
+            
+            if response["items"]:
+                item = response["items"][0]
+                return {
+                    "description": item["snippet"]["description"],
+                    "subscriber_count": int(item["statistics"]["subscriberCount"])
+                }
+        except:
+            pass
+        return {"description": "", "subscriber_count": 0}
     
     def _get_video_details(self, video_id: str) -> dict:
         """영상 상세 통계 정보 가져오기"""

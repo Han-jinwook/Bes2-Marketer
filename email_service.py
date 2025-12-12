@@ -29,12 +29,21 @@ class EmailSender:
             print("❌ 이메일 설정(SENDER_EMAIL, SENDER_PASSWORD)이 누락되었습니다.")
             return False
             
+        # 테스트 모드 확인
+        final_to_email = to_email
+        final_subject = subject
+        
+        if config.TEST_MODE:
+            print(f"🧪 Test Mode Active: Redirecting email to {config.TEST_EMAIL}")
+            final_to_email = config.TEST_EMAIL
+            final_subject = f"[TEST MODE] {subject} (Original To: {to_email})"
+            
         try:
             # 메시지 구성
             msg = MIMEMultipart()
             msg['From'] = sender_email
-            msg['To'] = to_email
-            msg['Subject'] = subject
+            msg['To'] = final_to_email
+            msg['Subject'] = final_subject
             msg.attach(MIMEText(body, 'plain'))
             
             # SMTP 서버 연결 및 발송
@@ -42,7 +51,7 @@ class EmailSender:
                 server.login(sender_email, sender_password)
                 server.send_message(msg)
                 
-            print(f"✅ Email sent successfully to {to_email}")
+            print(f"✅ Email sent successfully to {final_to_email}")
             return True
             
         except Exception as e:

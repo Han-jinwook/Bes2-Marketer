@@ -48,6 +48,10 @@ class Config:
     SENDER_EMAIL: str = get_secret("SENDER_EMAIL")
     SENDER_PASSWORD: str = get_secret("SENDER_PASSWORD")
     
+    # 🧪 테스트 모드 설정 (True일 경우 실 발송 대신 TEST_EMAIL로 발송)
+    TEST_MODE: bool = True
+    TEST_EMAIL: str = "chiu3@naver.com"
+    
     # 검색 키워드 (Bes2 앱 관련)
     SEARCH_KEYWORDS: list[str] = [
         "사진 정리",
