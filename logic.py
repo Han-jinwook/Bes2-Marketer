@@ -420,50 +420,14 @@ class AICopywriter:
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
         
-        # 1. 우선순위 모델 리스트 (성능/비용 효율적인 순서)
-        PRIORITY_MODELS = [
-            "models/gemini-1.5-flash",
-            "models/gemini-pro",
-            "models/gemini-1.0-pro",
-            "models/gemini-1.5-pro"
-        ]
-        
-        selected_model = None
-        available_models = []
-        
-        try:
-            print("🤖 Checking available Gemini models...")
-            # 사용 가능한 모델 이름 리스트 추출
-            all_models = list(genai.list_models())
-            available_names = [m.name for m in all_models if "generateContent" in m.supported_generation_methods]
-            
-            # 2. 우선순위 리스트에서 매칭되는 첫 번째 모델 선택
-            for priority in PRIORITY_MODELS:
-                if priority in available_names:
-                    selected_model = priority
-                    print(f"✅ Selected Best Model: {selected_model}")
-                    break
-            
-            # 3. 매칭되는 게 없으면 사용 가능한 것 중 아무거나(gemini 포함) 선택
-            if not selected_model:
-                for name in available_names:
-                    if "gemini" in name:
-                        selected_model = name
-                        print(f"⚠️ Fallback Model Selected: {selected_model}")
-                        break
-                        
-        except Exception as e:
-            print(f"❌ Model discovery failed: {e}")
-            
-        # 4. 최후의 보루
-        if not selected_model:
-            selected_model = "models/gemini-pro"
-            print("⚠️ Using default fallback: models/gemini-pro")
-
+        # Bes2 Marketer를 위한 최적의 모델: Gemini 1.5 Flash
+        # 이유 1: 긴 영상 자막(Transcript)을 한 번에 처리하는 긴 컨텍스트 윈도우 (1M)
+        # 이유 2: 마케팅 초안 생성에 충분한 한국어 작문 실력
+        # 이유 3: 가장 빠르고 경제적임 (Underdog 정신에 부합)
         self.model = genai.GenerativeModel(
-            model_name=selected_model
+            model_name="gemini-1.5-flash",
+            system_instruction=self.SYSTEM_PROMPT
         )
-        print(f"🚀 AICopywriter initialized with: {selected_model}")
     
     def generate_email(
         self,
@@ -487,14 +451,10 @@ class AICopywriter:
             생성된 이메일 본문
         """
         # 콘텐츠가 너무 길면 앞부분만 사용
-        content_preview = video_content[:3000] if video_content else "내용 없음"
+        content_preview = video_content[:15000] if video_content else "내용 없음"
+        # 1.5 Flash는 컨텍스트가 길므로 3000자 -> 15000자로 대폭 늘려서 더 정확하게 분석
         
-        # 시스템 프롬프트와 유저 프롬프트 결합
-        prompt = f"""{self.SYSTEM_PROMPT}
-
----
-[작업 요청]
-다음 유튜버에게 Bes2 앱을 소개하는 진심 어린 제안 이메일을 작성해줘.
+        prompt = f"""다음 유튜버에게 Bes2 앱을 소개하는 진심 어린 제안 이메일을 작성해줘.
 
 [타겟 유튜버 정보]
 - 채널명: {channel_name}
@@ -550,14 +510,9 @@ class AICopywriter:
         Returns:
             생성된 댓글 텍스트
         """
-        content_preview = video_content[:2000] if video_content else "내용 없음"
+        content_preview = video_content[:10000] if video_content else "내용 없음"
         
-        # 시스템 프롬프트와 유저 프롬프트 결합
-        prompt = f"""{self.SYSTEM_PROMPT}
-
----
-[작업 요청]
-다음 유튜브 영상에 달 댓글을 작성해줘. 광고가 아니라 '진짜 도움 되는 정보 공유'처럼 보여야 해.
+        prompt = f"""다음 유튜브 영상에 달 댓글을 작성해줘. 광고가 아니라 '진짜 도움 되는 정보 공유'처럼 보여야 해.
 
 [영상 정보]
 - 제목: {video_title}
