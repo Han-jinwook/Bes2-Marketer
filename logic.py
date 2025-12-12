@@ -420,23 +420,50 @@ class AICopywriter:
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
         
-        # 사용 가능한 모델 동적 탐색
-        model_name = "models/gemini-pro"  # 기본값
+        # 1. 우선순위 모델 리스트 (성능/비용 효율적인 순서)
+        PRIORITY_MODELS = [
+            "models/gemini-1.5-flash",
+            "models/gemini-pro",
+            "models/gemini-1.0-pro",
+            "models/gemini-1.5-pro"
+        ]
+        
+        selected_model = None
+        available_models = []
+        
         try:
-            print("🤖 Finding available Gemini models...")
-            for m in genai.list_models():
-                if "generateContent" in m.supported_generation_methods:
-                    if "gemini" in m.name:
-                        model_name = m.name
-                        print(f"✅ Found supported model: {model_name}")
+            print("🤖 Checking available Gemini models...")
+            # 사용 가능한 모델 이름 리스트 추출
+            all_models = list(genai.list_models())
+            available_names = [m.name for m in all_models if "generateContent" in m.supported_generation_methods]
+            
+            # 2. 우선순위 리스트에서 매칭되는 첫 번째 모델 선택
+            for priority in PRIORITY_MODELS:
+                if priority in available_names:
+                    selected_model = priority
+                    print(f"✅ Selected Best Model: {selected_model}")
+                    break
+            
+            # 3. 매칭되는 게 없으면 사용 가능한 것 중 아무거나(gemini 포함) 선택
+            if not selected_model:
+                for name in available_names:
+                    if "gemini" in name:
+                        selected_model = name
+                        print(f"⚠️ Fallback Model Selected: {selected_model}")
                         break
+                        
         except Exception as e:
-            print(f"⚠️ Model discovery failed, using default: {e}")
+            print(f"❌ Model discovery failed: {e}")
+            
+        # 4. 최후의 보루
+        if not selected_model:
+            selected_model = "models/gemini-pro"
+            print("⚠️ Using default fallback: models/gemini-pro")
 
         self.model = genai.GenerativeModel(
-            model_name=model_name
+            model_name=selected_model
         )
-        print(f"🚀 AICopywriter initialized with model: {model_name}")
+        print(f"🚀 AICopywriter initialized with: {selected_model}")
     
     def generate_email(
         self,
