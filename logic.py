@@ -495,46 +495,36 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
-        
-        # Google AI Studio에서 사용 가능한 모델들을 순서대로 시도
-        model_candidates = [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-pro"
-        ]
-        
-        for model_name in model_candidates:
-            try:
-                self.model = genai.GenerativeModel(model_name)
-                # 간단한 테스트로 실제 작동 확인
-                test_response = self.model.generate_content("Hi")
-                self.model_name = model_name
-                print(f"✅ Successfully using model: {model_name}")
-                return
-            except Exception as e:
-                print(f"❌ {model_name} failed: {str(e)[:100]}")
-                continue
-        
-        # 모든 모델 실패 시 에러
-        raise Exception("사용 가능한 Gemini 모델을 찾을 수 없습니다. API 키 또는 할당량을 확인하세요.")
+        # 테스트 없이 바로 생성 (실제 사용 시점에 _generate_safe에서 에러 처리)
+        self.model_name = "gemini-1.5-flash-latest"
+        self.model = genai.GenerativeModel(self.model_name)
 
     def _generate_safe(self, prompt: str) -> str:
         """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
         full_prompt = f"{self.SYSTEM_PROMPT}\n\n---\n[작업 요청]\n{prompt}"
         
-        try:
-            response = self.model.generate_content(full_prompt)
-            return response.text
-        except Exception as eFirst:
-            print(f"Primary model ({self.model_name}) failed: {eFirst}")
+        # 여러 모델을 순서대로 시도
+        models_to_try = [
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash", 
+            "gemini-1.5-pro",
+            "gemini-pro"
+        ]
+        
+        last_error = None
+        for model_name in models_to_try:
             try:
-                # 2차 시도: gemini-pro (fallback)
-                fallback = genai.GenerativeModel("gemini-pro")
-                response = fallback.generate_content(full_prompt)
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(full_prompt)
+                print(f"✅ Success with {model_name}")
                 return response.text
-            except Exception as eSecond:
-                return f"[AI 에러] 모델 생성 실패. API 키나 할당량을 확인하세요.\n1차: {eFirst}\n2차: {eSecond}"
+            except Exception as e:
+                last_error = e
+                print(f"⚠️ {model_name} failed: {str(e)[:80]}")
+                continue
+        
+        # 모든 모델 실패
+        return f"[AI 에러] 모든 Gemini 모델 실패.\n마지막 에러: {last_error}\n\nAPI 키 할당량을 확인하세요: https://aistudio.google.com/app/apikey"
     
     def generate_email(
         self,
