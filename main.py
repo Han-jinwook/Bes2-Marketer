@@ -520,15 +520,13 @@ with tab1:
                                 # B. 새로운 영상 -> AI 분석 (비용 발생)
                                 status_area.warning(f"🤖 [AI 분석] '{v_title}' 분석 중...")
                                 
-                                # 1. 자막 추출 (실패 시 설명글로 대체)
+                                # 1. 자막 추출 (자막 없으면 스킵)
                                 transcript = hunter.get_transcript(vid)
-                                if transcript:
-                                    content = transcript[:15000] # 길이 제한
-                                else:
-                                    # Fallback to description
-                                    desc = video.get('description', '')
-                                    content = f"[자막 없음 - 설명글로 대체]\n제목: {v_title}\n내용: {desc}"
-                                    st.toast(f"⚠️ 자막 없음 -> 설명글로 분석: {v_title}", icon="ℹ️")
+                                if not transcript:
+                                    st.toast(f"⏭️ 자막 없음 - 건너뜀: {v_title}", icon="⚠️")
+                                    continue
+                                
+                                content = transcript[:15000]  # 길이 제한
                                 
                                 # 2. 적합성 분석 (생략 - 무조건 통과)
                                 relevance = {"score": 100, "reason": "Keyword Search Match"}
