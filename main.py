@@ -1000,14 +1000,14 @@ with tab4:
     try:
         stats_draft = db.get_draft_stats()
     except Exception:
-        stats_draft = {"pending": "-", "sent": "-"}
+        stats_draft = {"email": {"pending": 0, "sent": 0}}
     
     with col1:
         st.metric("총 발굴 채널 (Leads)", f"{stats_lead['total']}명", f"+{stats_lead['new']} 신규")
     with col2:
-        st.metric("발송 완료 (Sent)", f"{stats_draft['email'].get('sent', 0)}건")
+        st.metric("발송 완료 (Sent)", f"{stats_draft.get('email', {}).get('sent', 0)}건")
     with col3:
-        st.metric("대기 중 (Pending)", f"{stats_draft['email'].get('pending', 0)}건")
+        st.metric("대기 중 (Pending)", f"{stats_draft.get('email', {}).get('pending', 0)}건")
         
     st.markdown("---")
     
