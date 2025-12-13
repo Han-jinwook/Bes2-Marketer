@@ -460,6 +460,8 @@ with tab1:
             with col_action:
                 if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True):
                     
+                    st.info(f"ℹ️ 현재 '관련도 커트라인'은 **{min_relevance}점**입니다. 이보다 낮으면 저장되지 않습니다.")
+                    
                     progress_bar = st.progress(0)
                     status_area = st.empty()
                     
@@ -471,6 +473,8 @@ with tab1:
                         video = next((v for v in results if v["video_id"] == vid), None)
                         
                         if not video:
+                            status_area.error(f"❌ 데이터 매칭 실패: ID {vid}")
+                            time.sleep(1)
                             continue
                             
                         v_title = video["title"]
@@ -529,8 +533,10 @@ with tab1:
                                 
                                 # [스마트 필터] 기준 점수 미달 시 PASS (DB 저장 안 함)
                                 if relevance["score"] < min_relevance:
-                                    st.toast(f"📉 기준 미달({relevance['score']}점 < {min_relevance}점): {v_title}", icon="🚫")
-                                    time.sleep(0.1)
+                                    msg = f"📉 점수 미달 ({relevance['score']}점 < {min_relevance}점): {v_title}"
+                                    st.toast(msg, icon="🚫")
+                                    status_area.warning(msg)
+                                    time.sleep(1)
                                     continue
                                 
                                 # 3. 이메일 & 댓글 생성
