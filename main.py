@@ -910,65 +910,57 @@ with tab3:
 # =============================================
 
 with tab4:
-    st.markdown("### 🔧 시스템 상태 및 로그")
-    st.info("이 화면을 캡처해서 개발자에게 보여주세요.")
+    st.markdown("### ⚙️ 데이터베이스 & 시스템 관리")
     
-    import google.generativeai as genai
-    import importlib.metadata
+    # 1. 시스템 현황 대시보드
+    col1, col2, col3 = st.columns(3)
     
-    # 1. 라이브러리 버전 확인
-    try:
-        version = importlib.metadata.version("google-generativeai")
-        st.write(f"**Google Generative AI Version:** `{version}`")
-    except:
-        st.error("라이브러리 버전을 확인할 수 없습니다.")
+    stats_lead = db.get_lead_stats()
+    stats_draft = db.get_draft_stats()
+    
+    with col1:
+        st.metric("총 발굴 채널 (Leads)", f"{stats_lead['total']}명", f"+{stats_lead['new']} 신규")
+    with col2:
+        st.metric("발송 완료 (Sent)", f"{stats_draft['email'].get('sent', 0)}건")
+    with col3:
+        st.metric("대기 중 (Pending)", f"{stats_draft['email'].get('pending', 0)}건")
         
     st.markdown("---")
     
-    # 2. 사용 가능한 모델 리스트 확인
-    st.markdown("#### 🤖 사용 가능한 Gemini 모델 리스트")
-    if st.button("모델 리스트 조회"):
-        try:
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            models = list(genai.list_models())
-            
-            model_data = []
-            for m in models:
-                model_data.append({
-                    "name": m.name,
-                    "supported_methods": m.supported_generation_methods,
-                    "description": m.description
-                })
-            
-            st.dataframe(model_data)
-            
-            # gemini-pro 존재 여부 확인
-            has_pro = any("gemini-pro" in m.name for m in models)
-            has_flash = any("gemini-1.5-flash" in m.name for m in models)
-            
-            if has_pro:
-                st.success("✅ `gemini-pro` 모델이 발견되었습니다.")
-            if has_flash:
-                st.success("✅ `gemini-1.5-flash` 모델이 발견되었습니다.")
-                
-        except Exception as e:
-            st.error(f"모델 리스트 조회 실패: {e}")
-            
+    # 2. 테스트 모드 설정 확인
+    st.markdown("#### 🧪 모드 설정")
+    if config.TEST_MODE:
+        st.info(f"현재 **테스트 모드(Test Mode)** 가 켜져 있습니다.\n\n"
+                f"모든 이메일은 실제 수신자 대신 **{config.TEST_EMAIL}**로 발송됩니다.\n"
+                f"실제 발송을 하려면 `config.py` 또는 환경변수에서 설정을 변경하세요.")
+    else:
+        st.error("🚨 현재 **실전 모드(Live Mode)** 입니다! 이메일이 실제 수신자에게 발송됩니다. 주의하세요.")
+        
     st.markdown("---")
     
-    # 3. 연결 테스트
-    st.markdown("#### ⚡ API 연결 테스트")
-    test_model_name = st.text_input("테스트할 모델명", value="models/gemini-pro")
+    # 3. DB 데이터 정리 (Cleanup)
+    st.markdown("#### 🗑️ 데이터 정리")
+    st.caption("오래된 임시 데이터(대기 중인 초안)를 삭제하여 DB 용량을 확보합니다. (발송 완료된 데이터는 보존됩니다)")
     
-    if st.button("테스트 실행"):
+    if st.button("🧹 7일 이상 지난 대기 데이터 삭제", type="secondary"):
         try:
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            model = genai.GenerativeModel(test_model_name)
-            response = model.generate_content("Hello, are you working?")
-            st.success("✅ 응답 성공!")
-            st.write(response.text)
+            # 7일 전 날짜 계산
+            cutoff_date = (datetime.utcnow() - timedelta(days=7)).isoformat()
+            
+            # 삭제 쿼리 (status='pending' AND created_at < 7 days ago)
+            response = db.client.table("drafts").delete().eq("status", "pending").lt("created_at", cutoff_date).execute()
+            
+            deleted_count = len(response.data) if response.data else 0
+            
+            if deleted_count > 0:
+                st.success(f"✅ 총 {deleted_count}개의 오래된 임시 데이터를 삭제했습니다.")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.info("깨끗합니다! 삭제할 오래된 데이터가 없습니다.")
+                
         except Exception as e:
-            st.error(f"❌ 테스트 실패: {e}")
+            st.error(f"데이터 삭제 중 오류 발생: {e}")
 
 
 # =============================================
