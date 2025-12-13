@@ -236,40 +236,51 @@ with st.sidebar:
     
     # 검색 기간
 
-    # 검색 설정
-    with st.expander("⚙️ 검색 옵션", expanded=True):
+    st.markdown("---")
+    
+    # 전략 선택 (Preset)
+    st.subheader("🎯 마케팅 작전 선택")
+    
+    strategy_options = {
+        "🦖 올드보이 발굴 (6개월~1년)": {"days": 365, "min_rel": 90, "desc": "오래된 영상 중 내용이 완벽한 곳만(90점+) 엄격하게 공략"},
+        "⚽ 미드필더 장악 (1~6개월)": {"days": 180, "min_rel": 85, "desc": "아직 검색 유입이 살아있는 구간 집중 공략 (85점+)"},
+        "⭐ 라이징 스타 (최근 1개월)": {"days": 30, "min_rel": 75, "desc": "최근 떠오르는 핫한 영상 선점 (75점+)"},
+        "☕ 데일리 루틴 (최근 24시간)": {"days": 1, "min_rel": 60, "desc": "매일 아침 가볍게 돌리는 루틴 (60점+)"}
+    }
+    
+    selected_strategy_name = st.radio(
+        "작전명",
+        list(strategy_options.keys()),
+        index=2, # 기본값: 라이징 스타
+        help="원하는 타겟 시기에 맞춰 자동으로 설정이 변경됩니다."
+    )
+    
+    current_strategy = strategy_options[selected_strategy_name]
+    
+    # 전략 설명 표시
+    st.info(f"💡 **Strategy:** {current_strategy['desc']}\n\n"
+            f"• 검색 기간: 최근 {current_strategy['days']}일\n"
+            f"• 최소 관련도: {current_strategy['min_rel']}점 이상")
+    
+    # 변수 매핑 (로직 연결용)
+    published_after = current_strategy["days"]
+    min_relevance = current_strategy["min_rel"]
+    
+    with st.expander("⚙️ 고급 설정 (수집 양)", expanded=False):
         max_results = st.slider(
-            "최대 검색 영상 수 (Candidates)",
+            "한번에 수집할 영상 수",
             min_value=10,
             max_value=100,
             value=30,
             step=10,
-            help="AI가 분석할 후보 영상을 넓게 가져옵니다."
-        )
-        
-        published_after = st.slider(
-            "검색 기간 (일)",
-            min_value=7,
-            max_value=365,
-            value=30,
-            step=7,
-            help="최근 N일 이내에 업로드된 영상만 검색합니다."
-        )
-        
-        min_relevance = st.slider(
-            "🎯 최소 관련도 기준 (AI Score)",
-            min_value=0,
-            max_value=100,
-            value=70,
-            step=5,
-            help="AI 분석 결과, 이 점수보다 낮은 영상은 '가차 없이' 버립니다. (DB 저장 X)"
+            help="많을수록 시간이 오래 걸립니다."
         )
     
     st.markdown("---")
     
     # 검색 버튼
     search_clicked = st.button(
-        "🎯 영상 검색 시작",
+        "🚀 작전 개시 (영상 검색)",
         type="primary",
         use_container_width=True
     )
@@ -283,13 +294,13 @@ with st.sidebar:
         else:
             keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
             
-            with st.spinner("🔍 유튜브 검색 중..."):
+            with st.spinner(f"🔍 '{selected_strategy_name.split()[0]}' 작전 수행 중..."):
                 try:
                     all_videos = []
                     progress_bar = st.progress(0)
                     
                     for i, keyword in enumerate(keywords):
-                        st.text(f"검색 중: {keyword}")
+                        st.text(f"Scanning: {keyword}")
                         videos = hunter.search_videos(
                             keyword=keyword,
                             max_results=max_results,
