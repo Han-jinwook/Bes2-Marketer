@@ -496,15 +496,9 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
         
-    def __init__(self):
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        
-        # [긴급 수정]
-        # 사용자 환경의 가용 모델 리스트에서 'gemini-1.5-flash'가 아닌
-        # 'models/gemini-flash-latest'가 확인되었습니다.
-        # 따라서 확인된 안전한 모델명으로 교체합니다.
+        # 모델 설정 (가장 안정적인 최신 1.5 Flash 버전 사용)
         self.model = genai.GenerativeModel(
-            model_name="models/gemini-flash-latest",
+            model_name="gemini-1.5-flash",
             system_instruction=self.SYSTEM_PROMPT
         )
     
