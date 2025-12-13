@@ -286,59 +286,34 @@ class YouTubeHunter:
         languages: list[str] = ["ko", "en"]
     ) -> Optional[str]:
         """
-        영상 자막 추출
-        
-        Args:
-            video_id: YouTube 영상 ID
-            languages: 우선순위 언어 목록
-            
-        Returns:
-            자막 전체 텍스트 (없으면 None)
+        영상 자막 추출 (최대한 강력하게)
         """
         try:
-            # 자막 목록 가져오기
+            # 1. 자막 목록 가져오기
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
-            # 1순위: 수동 생성 한국어/영어 자막
             transcript = None
-            for lang in languages:
-                try:
-                    transcript = transcript_list.find_manually_created_transcript([lang])
-                    break
-                except NoTranscriptFound:
-                    continue
             
-            # 2순위: 자동 생성 한국어/영어 자막
-            if not transcript:
-                for lang in languages:
-                    try:
-                        transcript = transcript_list.find_generated_transcript([lang])
-                        break
-                    except NoTranscriptFound:
-                        continue
-            
-            # 3순위: 아무 언어나 (자동생성 포함)
-            if not transcript:
+            # 2. 우선순위 언어 시도 (한국어 -> 영어)
+            try:
+                # find_transcript는 수동/자동 상관없이 해당 언어를 찾음
+                transcript = transcript_list.find_transcript(languages)
+            except:
+                # 3. 실패시 아무 자막이나 하나 가져오기 (Fallback)
                 try:
-                    # 모든 자막 중 첫 번째 것 사용
-                    all_transcripts = list(transcript_list)
-                    if all_transcripts:
-                        transcript = all_transcripts[0]
+                    # 목록의 첫 번째 자막 (보통 자동생성됨)
+                    transcript = next(iter(transcript_list))
                 except:
                     pass
-            
+
             if transcript:
-                # 자막 텍스트 추출 및 합치기
+                # 자막 텍스트 추출
                 transcript_data = transcript.fetch()
                 full_text = " ".join([entry["text"] for entry in transcript_data])
                 return full_text
                 
-        except TranscriptsDisabled:
-            print(f"Transcripts disabled for video: {video_id}")
-        except VideoUnavailable:
-            print(f"Video unavailable: {video_id}")
         except Exception as e:
-            print(f"Error getting transcript: {e}")
+            print(f"Error getting transcript for {video_id}: {e}")
         
         return None
     
