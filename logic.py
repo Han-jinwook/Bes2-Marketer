@@ -286,34 +286,149 @@ class YouTubeHunter:
         languages: list[str] = ["ko", "en"]
     ) -> Optional[str]:
         """
-        영상 자막 추출 (최대한 강력하게)
+        영상 자막 추출 (최대한 강력하게 - Raw 모드)
         """
         try:
+            print(f"[Transcript] Fetching for {video_id}...")
+            
             # 1. 자막 목록 가져오기
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # (cookies.txt가 있으면 사용하여 IP 차단/연령 제한 우회)
+            import os
+            cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+            
+            if os.path.exists(cookies_path):
+                print(f"   🍪 Using cookies from {cookies_path}")
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
+            else:
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+            # 디버깅용: 발견된 모든 자막 언어 출력
+            try:
+                available_langs = [f"{t.language_code}({'auto' if t.is_generated else 'manual'})" for t in transcript_list]
+                print(f"   found languages: {available_langs}")
+            except:
+                pass
             
             transcript = None
             
             # 2. 우선순위 언어 시도 (한국어 -> 영어)
             try:
-                # find_transcript는 수동/자동 상관없이 해당 언어를 찾음
                 transcript = transcript_list.find_transcript(languages)
             except:
-                # 3. 실패시 아무 자막이나 하나 가져오기 (Fallback)
+                pass
+
+            # 3. 실패시: 'ko'가 들어간 자막이 있는지 수동 검색 (자동생성 포함)
+            if not transcript:
+                for t in transcript_list:
+                    if 'ko' in t.language_code.lower():
+                        transcript = t
+                        print(f"   found alternative Korean: {t.language_code}")
+                        break
+            
+            # 4. 최후의 보루: 그냥 첫 번째 자막 가져오기
+            if not transcript:
                 try:
-                    # 목록의 첫 번째 자막 (보통 자동생성됨)
                     transcript = next(iter(transcript_list))
+                    print(f"   [Fallback] Taking first available: {transcript.language_code}")
                 except:
                     pass
 
             if transcript:
-                # 자막 텍스트 추출
+                # 자막 텍스트 추출 (JSON -> Text 변환)
                 transcript_data = transcript.fetch()
                 full_text = " ".join([entry["text"] for entry in transcript_data])
                 return full_text
                 
         except Exception as e:
-            print(f"Error getting transcript for {video_id}: {e}")
+            print(f"[Error] Transcript fetch failed for {video_id}: {e}")
+            
+        # 5. yt-dlp를 이용한 강력한 최후의 수단 (Python API)
+        try:
+            print(f"[yt-dlp] Trying Python API for {video_id}...")
+            import yt_dlp
+            import tempfile
+            import os
+            
+            # 시스템 임시 디렉토리 사용
+            temp_dir = tempfile.gettempdir()
+            output_template = os.path.join(temp_dir, f"bes2_temp_{video_id}")
+            
+            # yt-dlp 옵션 설정
+            ydl_opts = {
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['ko', 'en'],
+                'skip_download': True,
+                'outtmpl': output_template,
+                'quiet': True,
+                'no_warnings': True,
+            }
+            
+            # yt-dlp 실행
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+                
+                # 자막 데이터 직접 추출
+                if 'subtitles' in info or 'automatic_captions' in info:
+                    # 우선순위: 수동 자막(ko) > 자동 자막(ko) > 수동(en) > 자동(en)
+                    subtitles = info.get('subtitles', {})
+                    auto_captions = info.get('automatic_captions', {})
+                    
+                    subtitle_data = None
+                    
+                    # 1. 한국어 수동 자막
+                    if 'ko' in subtitles:
+                        subtitle_data = subtitles['ko']
+                    # 2. 한국어 자동 자막
+                    elif 'ko' in auto_captions:
+                        subtitle_data = auto_captions['ko']
+                    # 3. 영어 수동 자막
+                    elif 'en' in subtitles:
+                        subtitle_data = subtitles['en']
+                    # 4. 영어 자동 자막
+                    elif 'en' in auto_captions:
+                        subtitle_data = auto_captions['en']
+                    
+                    if subtitle_data:
+                        # VTT 형식 찾기
+                        vtt_url = None
+                        for sub in subtitle_data:
+                            if sub.get('ext') == 'vtt':
+                                vtt_url = sub.get('url')
+                                break
+                        
+                        if vtt_url:
+                            # VTT 다운로드 및 파싱
+                            import urllib.request
+                            
+                            response = urllib.request.urlopen(vtt_url)
+                            vtt_content = response.read().decode('utf-8')
+                            
+                            # VTT 파싱
+                            full_text = ""
+                            seen_lines = set()
+                            
+                            for line in vtt_content.split('\n'):
+                                line = line.strip()
+                                # 타임스탬프, 헤더, 빈 줄 등 제외
+                                if "-->" in line or line == "WEBVTT" or not line:
+                                    continue
+                                if line.isdigit():
+                                    continue
+                                # HTML 태그 제거
+                                import re
+                                line = re.sub(r'<[^>]+>', '', line)
+                                # 중복 제거
+                                if line and line not in seen_lines:
+                                    full_text += line + " "
+                                    seen_lines.add(line)
+                            
+                            if full_text:
+                                print(f"[yt-dlp] Success! Extracted {len(full_text)} chars")
+                                return full_text.strip()
+
+        except Exception as e:
+            print(f"[yt-dlp] Failed: {e}")
         
         return None
     
@@ -447,9 +562,9 @@ class AICopywriter:
 Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100% 작동합니다.
 개인정보 보호는 단순 기능이 아니라, 우리의 타협할 수 없는 신념입니다.
 
-【3. Smart Secretary - "귀찮은 일은 제가, 결정은 주인이"】
-우리는 "삭제해드립니다"라고 건방지게 말하지 않습니다.
-어떤 사진이 중요하고 안 중요한지는 오직 '주인(사용자)'만이 알기 때문입니다.
+【3. Smart Backdoor Strategy - "똑똑하게 백업하고 돈 아끼자"】
+구글포토나 클라우드를 쓰지 말라는 게 아닙니다.
+"쓰레기 사진까지 백업해서 돈 낭비하지 말고, Bes2로 알맹이만 남긴 뒤 똑똑하게 백업하라"는 현실적이고 경제적인 솔루션을 제시해야 합니다.
 → Bes2는 스크린샷, 중복 사진, 흔들린 사진을 **90%까지 완벽하게 분류해서 떠먹여 드립니다.**
 → 사용자는 마지막 **10%의 '삭제 결정(Yes/No)'만 하세요.**
 → 이 '비서' 같은 기능으로 용량을 확보하고, 알짜배기만 클라우드에 백업하여 돈을 아끼는 전략입니다.
