@@ -399,17 +399,7 @@ with tab1:
         except Exception as e:
             st.info("DB에 저장된 영상이 없습니다.")
     
-    if not videos_to_show:
-        st.info("👈 사이드바에서 키워드를 입력하고 [영상 검색 시작] 버튼을 눌러주세요.")
-    else:
-        st.markdown(f"**총 {len(videos_to_show)}개 영상**")
-        
-        for idx, video in enumerate(videos_to_show):
-            with st.container():
-                col1, col2, col3 = st.columns([1, 3, 1])
-                
-                with col1:
-                    if video.get("thumbnail_url"):
+    # 검색 결과가 있을 경우 (DataFrame View)
     st.markdown("### 📹 영상 검색 결과")
     
     if "search_results" in st.session_state and st.session_state.search_results:
