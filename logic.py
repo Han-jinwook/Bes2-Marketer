@@ -503,10 +503,9 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
         """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
         full_prompt = f"{self.SYSTEM_PROMPT}\n\n---\n[작업 요청]\n{prompt}"
         
-        # 실제 사용 가능한 모델들 (모델 목록 조회 결과 기반)
+        # Flash 모델만 사용 (비용 절감)
         models_to_try = [
             "models/gemini-2.5-flash",
-            "models/gemini-2.5-pro",
             "models/gemini-2.0-flash",
             "models/gemini-2.0-flash-exp"
         ]
