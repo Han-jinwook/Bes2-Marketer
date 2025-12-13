@@ -342,7 +342,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "📹 영상 리스트 & 분석",
     "✉️ 이메일 발송 관리",
     "💬 댓글/커뮤니티 마케팅",
-    "🔧 시스템 진단"
+    "⚙️ 시스템 관리"
 ])
 
 # =============================================
@@ -401,129 +401,203 @@ with tab1:
                 
                 with col1:
                     if video.get("thumbnail_url"):
-                        st.image(video["thumbnail_url"], use_container_width=True)
-                    else:
-                        st.image("https://via.placeholder.com/320x180?text=No+Thumbnail", use_container_width=True)
-                
-                with col2:
-                    st.markdown(f"**{video['title'][:60]}{'...' if len(video['title']) > 60 else ''}**")
-                    st.caption(f"📺 {video['channel_name']}")
+    st.markdown("### 📹 영상 검색 결과")
+    
+    if "search_results" in st.session_state and st.session_state.search_results:
+        results = st.session_state.search_results
+        
+        # 1. DataFrame 변환 for 일괄 선택
+        video_data = []
+        for v in results:
+            video_data.append({
+                "선택": False,
+                "썸네일": v["thumbnail_url"],
+                "제목": v["title"],
+                "채널명": v["channel_name"],
+                "게시일": v["published_at"][:10],
+                "조회수": f"{v['view_count']:,}",
+                "video_id": v["video_id"],
+                "raw_data": v # 전체 데이터 보존
+            })
+            
+        df_videos = pd.DataFrame(video_data)
+        
+        # 2. 선택 가능한 테이블 표시
+        st.caption(f"총 {len(results)}개의 영상을 찾았습니다. 분석할 영상을 선택하세요.")
+        
+        edited_videos = st.data_editor(
+            df_videos,
+            column_config={
+                "선택": st.column_config.CheckboxColumn("선택", default=False),
+                "썸네일": st.column_config.ImageColumn("썸네일", width="small"),
+                "제목": st.column_config.TextColumn("제목", width="medium"),
+                "video_id": None, # 숨김
+                "raw_data": None  # 숨김
+            },
+            hide_index=True,
+            use_container_width=True,
+            height=500,
+            key="video_selector"
+        )
+        
+        # 3. 일괄 분석 버튼
+        selected_rows = edited_videos[edited_videos["선택"]]
+        
+        if not selected_rows.empty:
+            st.markdown("---")
+            col_action, col_msg = st.columns([1, 2])
+            
+            with col_action:
+                if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True):
                     
-                    # 통계 정보
-                    views = video.get("view_count", 0)
-                    subs = video.get("channel_info", {}).get("subscriber_count", 0)
+                    progress_bar = st.progress(0)
+                    status_area = st.empty()
                     
-                    info_cols = st.columns(3)
-                    with info_cols[0]:
-                        st.caption(f"👁️ 조회수: {views:,}")
-                    with info_cols[1]:
-                        st.caption(f"👥 구독자: {subs:,}")
-                    with info_cols[2]:
-                        relevance = video.get("relevance_score", 0)
-                        if relevance > 0:
-                            st.caption(f"🎯 관련성: {relevance:.0%}")
+                    success_count = 0
                     
-                    # 자막 유무
-                    has_transcript = bool(video.get("transcript_text"))
-                    st.caption(f"📝 자막: {'✅ 있음' if has_transcript else '❌ 없음 (설명 사용)'}")
-                
-                with col3:
-                    # 분석 버튼
-                    if st.button("🤖 분석 & 초안 생성", key=f"analyze_{idx}", use_container_width=True):
-                        with st.spinner("AI 분석 중..."):
-                            try:
-                                # 관련성 분석
-                                content = video.get("transcript_text", video.get("description", ""))
+                    for idx, row in enumerate(selected_rows.itertuples()):
+                        video = row.raw_data
+                        vid = video["video_id"]
+                        v_title = video["title"]
+                        
+                        # 진행률 업데이트
+                        progress = (idx + 1) / len(selected_rows)
+                        progress_bar.progress(progress)
+                        
+                        try:
+                            # -----------------------------------------------
+                            # [스마트 로직] DB 중복 확인 (비용 절약)
+                            # -----------------------------------------------
+                            if db.video_exists(vid):
+                                # A. 이미 분석된 경우 -> DB에서 로드 (비용 0원)
+                                status_area.info(f"💾 [DB 로드] '{v_title}' (비용 0원)")
+                                time.sleep(0.5) # UI 반영을 위한 짧은 대기
+                                
+                                # DB에서 데이터 가져오기
+                                db_video = db.get_video_by_video_id(vid)
+                                db_drafts = db.get_drafts_by_video(db_video["id"])
+                                
+                                email_content = ""
+                                comment_content = ""
+                                
+                                for d in db_drafts:
+                                    if d["draft_type"] == "email":
+                                        email_content = d["content"]
+                                    elif d["draft_type"] == "comment":
+                                        comment_content = d["content"]
+                                
+                                # 세션에 로드
+                                st.session_state.generated_drafts[vid] = {
+                                    "video": video,
+                                    "email": email_content,
+                                    "comment": comment_content,
+                                    "summary": db_video.get("summary", ""),
+                                    "relevance": {"score": db_video.get("relevance_score", 0)},
+                                    "db_id": next((d["id"] for d in db_drafts if d["draft_type"] == "email"), "") 
+                                }
+                                success_count += 1
+                                
+                            else:
+                                # B. 새로운 영상 -> AI 분석 (비용 발생)
+                                status_area.warning(f"🤖 [AI 분석] '{v_title}' 분석 중...")
+                                
+                                # 1. 자막 추출
+                                transcript = hunter.get_transcript(vid)
+                                if not transcript:
+                                    st.toast(f"⚠️ 자막 없음: {v_title}", icon="❌")
+                                    continue
+                                    
+                                content = transcript[:15000] # 길이 제한
+                                
+                                # 2. 적합성 분석
                                 relevance = copywriter.analyze_relevance(content)
                                 
-                                # 이메일 생성
+                                if relevance["score"] < 40:
+                                    st.toast(f"📉 적합도 낮음({relevance['score']}점): {v_title}", icon="pass")
+                                    # 필요하면 여기서 continue 할 수도 있음 (사용자 선택에 따라)
+                                
+                                # 3. 이메일 & 댓글 생성
                                 email = copywriter.generate_email(
                                     channel_name=video["channel_name"],
                                     video_title=video["title"],
                                     video_content=content,
                                     subscriber_count=video.get("channel_info", {}).get("subscriber_count", 0)
                                 )
-                                
-                                # 댓글 생성
                                 comment = copywriter.generate_comment(
+                                    channel_name=video["channel_name"],
                                     video_title=video["title"],
                                     video_content=content
                                 )
-                                
-                                # 요약
                                 summary = copywriter.summarize_video(content)
                                 
-                                # 세션에 저장
-                                st.session_state.generated_drafts[video["video_id"]] = {
+                                # 4. DB 저장
+                                # (1) 리드 저장
+                                existing_lead = db.get_lead_by_channel_id(video["channel_id"])
+                                if existing_lead:
+                                    lead_id = existing_lead["id"]
+                                else:
+                                    lead = db.create_lead(
+                                        channel_name=video["channel_name"],
+                                        channel_id=video["channel_id"],
+                                        subscriber_count=video.get("channel_info", {}).get("subscriber_count", 0),
+                                        email=video.get("channel_info", {}).get("email"),
+                                        keywords=[video.get("search_keyword", "")],
+                                    )
+                                    lead_id = lead["id"]
+                                
+                                # (2) 영상 저장
+                                saved_video = db.create_video(
+                                    video_id=vid,
+                                    title=v_title,
+                                    lead_id=lead_id,
+                                    view_count=int(str(video["view_count"]).replace(",", "")), # 콤마 제거
+                                    video_url=video["video_url"],
+                                    thumbnail_url=video["thumbnail_url"],
+                                    transcript_text=content,
+                                    summary=summary,
+                                    relevance_score=relevance["score"],
+                                    search_keyword=video.get("search_keyword", "")
+                                )
+                                video_db_id = saved_video["id"]
+                                
+                                # (3) 초안 저장
+                                email_draft = db.create_draft(
+                                    draft_type="email",
+                                    content=email,
+                                    video_id=video_db_id,
+                                    lead_id=lead_id
+                                )
+                                db.create_draft(
+                                    draft_type="comment",
+                                    content=comment,
+                                    video_id=video_db_id,
+                                    lead_id=lead_id
+                                )
+                                
+                                # 세션 업데이트
+                                st.session_state.generated_drafts[vid] = {
                                     "video": video,
                                     "email": email,
                                     "comment": comment,
                                     "summary": summary,
-                                    "relevance": relevance
+                                    "relevance": relevance,
+                                    "db_id": email_draft["id"]
                                 }
+                                success_count += 1
                                 
-                                # DB에 저장 (검색 결과인 경우)
-                                if data_source == "🔍 검색 결과":
-                                    # 리드 저장
-                                    existing_lead = db.get_lead_by_channel_id(video["channel_id"])
-                                    if existing_lead:
-                                        lead_id = existing_lead["id"]
-                                    else:
-                                        lead = db.create_lead(
-                                            channel_name=video["channel_name"],
-                                            channel_id=video["channel_id"],
-                                            subscriber_count=video.get("channel_info", {}).get("subscriber_count", 0),
-                                            email=video.get("channel_info", {}).get("email"),
-                                            keywords=[video.get("search_keyword", "")],
-                                        )
-                                        lead_id = lead["id"]
-                                    
-                                    # 영상 저장
-                                    if not db.video_exists(video["video_id"]):
-                                        saved_video = db.create_video(
-                                            video_id=video["video_id"],
-                                            title=video["title"],
-                                            lead_id=lead_id,
-                                            view_count=video.get("view_count", 0),
-                                            video_url=video.get("video_url"),
-                                            thumbnail_url=video.get("thumbnail_url"),
-                                            transcript_text=content,
-                                            summary=summary,
-                                            relevance_score=relevance["score"]
-                                        )
-                                        video_db_id = saved_video["id"]
-                                    else:
-                                        existing = db.get_video_by_video_id(video["video_id"])
-                                        video_db_id = existing["id"]
-                                    
-                                    # 초안 저장
-                                    # 초안 저장
-                                    email_draft = db.create_draft(
-                                        draft_type="email",
-                                        content=email,
-                                        video_id=video_db_id,
-                                        lead_id=lead_id
-                                    )
-                                    db.create_draft(
-                                        draft_type="comment",
-                                        content=comment,
-                                        video_id=video_db_id,
-                                        lead_id=lead_id
-                                    )
-                                    
-                                    # 세션에 DB ID 업데이트
-                                    if video["video_id"] in st.session_state.generated_drafts:
-                                        st.session_state.generated_drafts[video["video_id"]]["db_id"] = email_draft["id"]
-                                
-                                st.success("✅ 분석 완료! 탭 2, 3에서 확인하세요.")
-                                
-                            except Exception as e:
-                                st.error(f"오류: {e}")
-                    
-                    # 유튜브 링크
-                    st.link_button("🔗 영상 보기", video.get("video_url", "#"), use_container_width=True)
-                
-                st.markdown("---")
+                        except Exception as e:
+                            print(f"Error processing {vid}: {e}")
+                            st.toast(f"❌ 오류 발생: {v_title}", icon="⚠️")
+                            
+                    status_area.success(f"✅ {success_count}개 영상 분석 및 초안 생성 완료!")
+                    st.success("분석이 완료되었습니다. '이메일 발송 관리' 탭에서 확인하세요.")
+                    time.sleep(2)
+                    st.rerun()
+
+    else:
+        st.info("👈 왼쪽 사이드바에서 키워드를 입력하고 검색을 시작하세요.")
+    
+    st.markdown("---")
 
 # =============================================
 # 탭 2: 이메일 발송 관리
