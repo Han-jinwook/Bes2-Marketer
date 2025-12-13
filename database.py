@@ -144,8 +144,23 @@ class Database:
     
     def get_video_by_video_id(self, video_id: str) -> Optional[dict]:
         """YouTube 영상 ID로 조회"""
-        response = self.client.table("videos").select("*").eq("video_id", video_id).execute()
-        return response.data[0] if response.data else None
+        try:
+            response = self.client.table("videos").select("*").eq("video_id", video_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error fetching video: {e}")
+            return None
+
+    def get_known_video_ids(self) -> set:
+        """DB에 저장된 모든 Video ID 조회 (중복 검색 방지용)"""
+        try:
+            # 1000개 제한이 있을 수 있으니 range를 넉넉하게 잡거나, 일단은 기본으로
+            # Supabase default limit might be 1000. For now, simple select is okay.
+            response = self.client.table("videos").select("video_id").execute()
+            return {item["video_id"] for item in response.data} if response.data else set()
+        except Exception as e:
+            print(f"Error fetching known video IDs: {e}")
+            return set()
     
     def get_videos_by_lead(self, lead_id: str) -> list[dict]:
         """특정 리드의 모든 영상 조회"""

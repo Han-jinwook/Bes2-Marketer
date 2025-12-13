@@ -56,100 +56,85 @@ class YouTubeHunter:
         # 날짜 필터 계산
         published_after = (
             datetime.utcnow() - timedelta(days=published_after_days)
-        ).isoformat() + "Z"
+    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30) -> list[dict]:
+        """
+        유튜브 영상 검색 (Deep Search 적용)
+        - DB에 없는 '새로운' 영상이 max_results만큼 모일 때까지 페이지를 넘겨가며 검색
+        - 최대 5페이지(약 250개)까지만 탐색하여 무한 루프 방지 중
+        """
+        from database import db  # Lazy import to avoid circular dependency
         
-        try:
-            # 1. YouTube API로 1차 검색 (Broad Match)
-            # API는 기본적으로 OR/AND가 섞인 관련성 검색을 하므로, 
-            # 넉넉하게 가져온 뒤 파이썬에서 정밀 필터링합니다.
-            fetch_limit = min(max_results * 3, 50)  # 필터링을 고려해 3배수 요청
-            
-            search_response = self.youtube.search().list(
-                q=keyword,
-                part="snippet",
-                type="video",
-                maxResults=fetch_limit,
-                order=order,
-                publishedAfter=published_after,
-                relevanceLanguage=language,
-                regionCode="KR",
-                videoCaption="closedCaption"
-            ).execute()
-            
-            # 2. 정밀 필터링 (Space = AND, Korean Only)
-            import re
-            def has_korean(text):
-                return bool(re.search(r'[가-힣]', text))
-            
-            required_terms = keyword.split()
-            filtered_items = []
-            
-            for item in search_response.get("items", []):
-                snippet = item["snippet"]
-                title = snippet["title"]
-                description = snippet["description"]
+        # 날짜 계산
+        published_after = (datetime.utcnow() - timedelta(days=published_after_days)).isoformat("T") + "Z"
+        
+        print(f"Searching for '{keyword}' after {published_after}...")
+        
+        # 0. DB에 있는 데이터 미리 가져오기 (중복 필터링용)
+        known_ids = db.get_known_video_ids()
+        
+        collected_items = []
+        next_page_token = None
+        
+        # 최대 5페이지까지 탐색 (API 비용 안전장치)
+        # 한 페이지당 50개씩 요청하므로 최대 250개 후보군 탐색
+        for page_num in range(5):
+            try:
+                search_response = self.youtube.search().list(
+                    q=keyword,
+                    part="id,snippet",
+                    maxResults=50, # 한번에 최대로 가져와서 필터링 (가성비)
+                    order="date",
+                    publishedAfter=published_after,
+                    type="video",
+                    pageToken=next_page_token
+                ).execute()
                 
-                # (1) 한국어 포함 여부 체크
-                if not has_korean(title):
-                    continue
-                
-                # (2) AND 조건 체크 (모든 단어가 제목이나 설명에 있어야 함)
-                # 대소문자 무시를 위해 lower() 사용
-                search_context = (title + " " + description).lower()
-                is_match = True
-                
-                for term in required_terms:
-                    if term.lower() not in search_context:
-                        is_match = False
-                        break
-                
-                if is_match:
-                    filtered_items.append(item)
+                items = search_response.get("items", [])
+                if not items:
+                    break
                     
-            # 요청한 개수만큼 자르기
-            filtered_items = filtered_items[:max_results]
-            search_response["items"] = filtered_items
-            
-            # 정규식 모듈 (상단에 import 되어 있다고 가정, 없으면 추가)
-            import re
-            
-            videos = []
-            for item in search_response.get("items", []):
-                video_id = item["id"]["videoId"]
-                snippet = item["snippet"]
+                # 필터링 로직
+                import re
+                def has_korean(text):
+                    return bool(re.search(r'[가-힣]', text))
                 
-                # 영상 상세 정보 가져오기
-                video_details = self._get_video_details(video_id)
+                required_terms = keyword.split()
                 
-                # 채널 상세 정보 가져오기 (설명란에서 이메일 찾기 위함)
-                channel_info = self._get_channel_details(snippet["channelId"])
-                
-                # 이메일 추출 (1순위: 영상 설명, 2순위: 채널 설명)
-                found_email = self._extract_email_from_text(snippet["description"])
-                if not found_email:
-                    found_email = self._extract_email_from_text(channel_info.get("description", ""))
-
-                videos.append({
-                    "video_id": video_id,
-                    "title": snippet["title"],
-                    "description": snippet["description"],
-                    "channel_id": snippet["channelId"],
-                    "channel_name": snippet["channelTitle"],
-                    "published_at": snippet["publishedAt"],
-                    "thumbnail_url": snippet["thumbnails"]["high"]["url"],
-                    "video_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "view_count": video_details.get("view_count", 0),
-                    "like_count": video_details.get("like_count", 0),
-                    "comment_count": video_details.get("comment_count", 0),
-                    "search_keyword": keyword,
-                    "channel_info": {
-                        "subscriber_count": channel_info.get("subscriber_count", 0),
-                        "email": found_email  # 추출된 이메일 추가
+                for item in items:
+                    # 충분히 모았으면 종료
+                    if len(collected_items) >= max_results:
+                        break
+                        
+                    vid = item["id"]["videoId"]
+                    snippet = item["snippet"]
+                    title = snippet["title"]
+                    description = snippet["description"]
+                    
+                    # 1. 중복 체크 (DB에 있으면 스킵 - Deep Search 핵심)
+                    if vid in known_ids:
+                        continue
+                        
+                    # 2. 한국어 체크
+                    if not has_korean(title):
+                        continue
+                        
+                    # 3. 키워드 AND 조건 체크
+                    search_context = (title + " " + description).lower()
+                    if not all(term.lower() in search_context for term in required_terms):
+                        continue
+                        
+                    # 합격!
+                    # 채널 정보 추가 수집을 위해 포맷팅
+                    video_data = {
+                        "video_id": vid,
+                        "title": title,
+                        "description": description,
+                        "thumbnail_url": snippet["thumbnails"]["high"]["url"],
+                        "published_at": snippet["publishedAt"],
+                        "channel_id": snippet["channelId"],
+                        "channel_name": snippet["channelTitle"],
+                        "video_url": f"https://www.youtube.com/watch?v={vid}"
                     }
-                })
-            
-            return videos
-            
         except Exception as e:
             print(f"YouTube search error: {e}")
             return []
