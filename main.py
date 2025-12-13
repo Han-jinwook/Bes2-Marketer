@@ -416,13 +416,18 @@ with tab1:
         # 1. DataFrame 변환 for 일괄 선택
         video_data = []
         for v in results:
+            # view_count 안전하게 처리
+            view_count = v.get('view_count', 0)
+            if isinstance(view_count, str):
+                view_count = int(view_count.replace(',', '')) if view_count.replace(',', '').isdigit() else 0
+            
             video_data.append({
                 "선택": False,
                 "썸네일": v["thumbnail_url"],
                 "제목": v["title"],
                 "채널명": v["channel_name"],
                 "게시일": v["published_at"][:10],
-                "조회수": f"{v['view_count']:,}",
+                "조회수": f"{view_count:,}",
                 "video_id": v["video_id"],
                 "raw_data": v # 전체 데이터 보존
             })
