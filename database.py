@@ -266,6 +266,17 @@ class Database:
         """대기 중인 초안 조회"""
         return self.get_all_drafts(draft_type=draft_type, status="pending")
     
+    def get_pending_email_drafts_detailed(self) -> list[dict]:
+        """대기 중인 이메일 초안 상세 조회 (영상, 리드 정보 포함)"""
+        try:
+            response = self.client.table("drafts").select(
+                "*, videos(title, video_id), leads(channel_name, email, subscriber_count)"
+            ).eq("draft_type", "email").eq("status", "pending").order("created_at", desc=True).execute()
+            return response.data or []
+        except Exception as e:
+            print(f"Error fetching detailed drafts: {e}")
+            return []
+    
     def update_draft(self, draft_id: str, **kwargs) -> Optional[dict]:
         """초안 업데이트"""
         response = self.client.table("drafts").update(kwargs).eq("id", draft_id).execute()
