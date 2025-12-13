@@ -13,6 +13,7 @@ from youtube_transcript_api._errors import (
     NoTranscriptFound,
     VideoUnavailable
 )
+import re
 import google.generativeai as genai
 
 from config import config
@@ -31,31 +32,6 @@ class YouTubeHunter:
             "youtube", "v3",
             developerKey=config.YOUTUBE_API_KEY
         )
-    
-    def search_videos(
-        self,
-        keyword: str,
-        max_results: int = 10,
-        published_after_days: int = 30,
-        order: str = "relevance",
-        language: str = "ko"
-    ) -> list[dict]:
-        """
-        키워드로 YouTube 영상 검색 (Strict Mode: Space=AND)
-        
-        Args:
-            keyword: 검색 키워드 (띄어쓰기는 AND 조건으로 처리)
-            max_results: 최대 결과 수
-            published_after_days: 최근 N일 이내 영상만 검색
-            order: 정렬 기준
-            language: 검색 언어
-            
-        Returns:
-            검색된 영상 정보 리스트
-        """
-        # 날짜 필터 계산
-        published_after = (
-            datetime.utcnow() - timedelta(days=published_after_days)
     def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30) -> list[dict]:
         """
         유튜브 영상 검색 (Deep Search 적용)
