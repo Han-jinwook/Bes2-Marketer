@@ -125,19 +125,92 @@ class YouTubeHunter:
                         
                     # 합격!
                     # 채널 정보 추가 수집을 위해 포맷팅
-                    video_data = {
-                        "video_id": vid,
-                        "title": title,
-                        "description": description,
-                        "thumbnail_url": snippet["thumbnails"]["high"]["url"],
-                        "published_at": snippet["publishedAt"],
-                        "channel_id": snippet["channelId"],
-                        "channel_name": snippet["channelTitle"],
                         "video_url": f"https://www.youtube.com/watch?v={vid}"
                     }
-        except Exception as e:
-            print(f"YouTube search error: {e}")
-            return []
+                    collected_items.append(video_data)
+                
+                # 목표 달성 체크
+                if len(collected_items) >= max_results:
+                    break
+                    
+                # 다음 페이지 토큰 확인
+                next_page_token = search_response.get("nextPageToken")
+                if not next_page_token:
+                    break
+                    
+                print(f"Page {page_num+1} done. Collected {len(collected_items)} new videos so far.")
+                
+            except Exception as e:
+                print(f"Search API Error: {e}")
+                break
+        
+        # 상세 정보(조회수, 구독자 등) 추가 조회 - 모은 것들에 대해서만
+        if collected_items:
+            try:
+                # 50개씩 끊어서 요청
+                filtered_Collected = collected_items[:max_results]
+                final_items = []
+                
+                # list slicing in chunks of 50
+                chunk_size = 50
+                for i in range(0, len(filtered_Collected), chunk_size):
+                    chunk = filtered_Collected[i:i + chunk_size]
+                    video_ids = [v["video_id"] for v in chunk]
+                    
+                    stats_response = self.youtube.videos().list(
+                        part="statistics",
+                        id=",".join(video_ids)
+                    ).execute()
+                    
+                    stats_map = {item["id"]: item["statistics"] for item in stats_response.get("items", [])}
+                    
+                    # 채널 ID 모으기
+                    channel_ids = list({v["channel_id"] for v in chunk})
+                    channel_map = {}
+                    
+                    # 채널 정보 요청 (구독자 수 등) - 최대 50개 제한 고려
+                    for k in range(0, len(channel_ids), 50):
+                        c_chunk = channel_ids[k:k+50]
+                        chan_resp = self.youtube.channels().list(
+                            part="statistics,snippet", 
+                            id=",".join(c_chunk)
+                        ).execute()
+                        for c_item in chan_resp.get("items", []):
+                            channel_map[c_item["id"]] = {
+                                "subscriber_count": int(c_item["statistics"].get("subscriberCount", 0)),
+                                "description": c_item["snippet"].get("description", "")
+                            }
+
+                    for v in chunk:
+                        vid = v["video_id"]
+                        cid = v["channel_id"]
+                        
+                        # 통계 병합
+                        if vid in stats_map:
+                            v["view_count"] = int(stats_map[vid].get("viewCount", 0))
+                        
+                        # 채널 정보 및 이메일 추출 병합
+                        chan_info = channel_map.get(cid, {})
+                        
+                        # 이메일 추출
+                        email = self._extract_email_from_text(v["description"])
+                        if not email:
+                            email = self._extract_email_from_text(chan_info.get("description", ""))
+
+                        v["channel_info"] = {
+                            "subscriber_count": chan_info.get("subscriber_count", 0),
+                            "email": email
+                        }
+                        
+                        final_items.append(v)
+                        
+                return final_items
+                
+            except Exception as e:
+                print(f"Detail API Error: {e}")
+                return collected_items[:max_results]
+                
+        return collected_items[:max_results]
     
     def _extract_email_from_text(self, text: str) -> Optional[str]:
         """텍스트에서 이메일 패턴 추출"""
