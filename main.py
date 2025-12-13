@@ -612,10 +612,12 @@ with tab1:
                             print(f"Error processing {vid}: {e}")
                             st.toast(f"❌ 오류 발생: {v_title}", icon="⚠️")
                             
-                    status_area.success(f"✅ {success_count}개 영상 분석 및 초안 생성 완료!")
-                    st.success("분석이 완료되었습니다. '이메일 발송 관리' 탭에서 확인하세요.")
-                    time.sleep(2)
-                    st.rerun()
+                    status_area.empty()
+                    if success_count > 0:
+                        st.success(f"✅ 총 {success_count}개 영상 분석 완료! \n\n👉 **'✉️ 이메일 발송 관리'** 탭으로 이동하여 초안을 확인하세요.")
+                        st.balloons()
+                    else:
+                        st.warning("⚠️ 분석된 영상이 없습니다.")
 
     else:
         st.info("👈 왼쪽 사이드바에서 키워드를 입력하고 검색을 시작하세요.")
@@ -1012,8 +1014,15 @@ with tab4:
     # 1. 시스템 현황 대시보드
     col1, col2, col3 = st.columns(3)
     
-    stats_lead = db.get_lead_stats()
-    stats_draft = db.get_draft_stats()
+    try:
+        stats_lead = db.get_lead_stats()
+    except Exception:
+        stats_lead = {"total": "-", "new": "-"}
+        
+    try:
+        stats_draft = db.get_draft_stats()
+    except Exception:
+        stats_draft = {"pending": "-", "sent": "-"}
     
     with col1:
         st.metric("총 발굴 채널 (Leads)", f"{stats_lead['total']}명", f"+{stats_lead['new']} 신규")
