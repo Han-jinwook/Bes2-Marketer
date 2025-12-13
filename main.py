@@ -643,9 +643,14 @@ with tab2:
                 lead = d.get("leads", {}) or {}
                 ch_name = lead.get("channel_name", "Unknown")
                 
-                # 라벨링 (오류 데이터 감지)
+                # 라벨링 (실제 에러 메시지만 감지)
                 content = d.get("content") or ""
-                is_error = "오류" in content or "실패" in content or content.strip() == ""
+                is_error = (
+                    content.strip() == "" or 
+                    content.startswith("[AI 에러]") or 
+                    content.startswith("[오류]") or
+                    "404 models/" in content
+                )
                 label_icon = "⚠️" if is_error else "📄"
                 
                 # 유니크한 키 생성을 위해 ID 일부 포함
@@ -676,8 +681,13 @@ with tab2:
                 # 본문 에디터
                 content = d.get("content") or ""
                 
-                # 오류 데이터 시각적 경고
-                is_junk = "오류" in content or "실패" in content or content.strip() == ""
+                # 오류 데이터 시각적 경고 (실제 에러 메시지만 감지)
+                is_junk = (
+                    content.strip() == "" or 
+                    content.startswith("[AI 에러]") or 
+                    content.startswith("[오류]") or
+                    "404 models/" in content
+                )
                 if is_junk:
                     st.error("🚨 AI 생성 중 오류가 발생한 데이터입니다. 삭제해주세요.")
                 
