@@ -578,6 +578,7 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     
     def generate_comment(
         self,
+        channel_name: str,
         video_title: str,
         video_content: str,
         style: str = "helpful"
