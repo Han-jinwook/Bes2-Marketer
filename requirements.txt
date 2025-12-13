@@ -13,6 +13,7 @@ google-generativeai==0.8.3
 # YouTube API
 google-api-python-client==2.154.0
 youtube-transcript-api==0.6.2
+yt-dlp==2024.12.13
 
 # Utilities
 python-dotenv==1.0.1

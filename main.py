@@ -4,6 +4,17 @@ AI 기반 유튜브 마케팅 자동화 대시보드
 """
 
 import streamlit as st
+
+# =============================================
+# 페이지 설정 (가장 먼저 실행되어야 함)
+# =============================================
+st.set_page_config(
+    page_title="Bes2 Marketer",
+    page_icon="🚀",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 from datetime import datetime
 import time
 import pandas as pd
@@ -11,17 +22,6 @@ import pandas as pd
 from config import config
 from database import db, test_connection
 from logic import hunter, copywriter, AICopywriter
-
-# =============================================
-# 페이지 설정
-# =============================================
-
-st.set_page_config(
-    page_title="Bes2 Marketer",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # =============================================
 # 커스텀 CSS
@@ -308,13 +308,10 @@ with st.sidebar:
                         )
                         
                         for video in videos:
-                            # 자막/설명 가져오기
-                            content = hunter.get_video_content(
-                                video["video_id"],
-                                video["description"]
-                            )
-                            video["transcript_text"] = content["content"]
-                            video["content_source"] = content["source"]
+                            # 검색 단계에서는 메타데이터만 수집 (자막은 분석 단계에서)
+                            # 자막 추출이 느리고 실패할 수 있어서 검색 속도 향상을 위해 제거
+                            video["transcript_text"] = ""  # 빈 값으로 초기화
+                            video["content_source"] = "not_fetched"
                             
                             # 채널 정보
                             channel_info = hunter.get_channel_info(video["channel_id"])
@@ -520,13 +517,17 @@ with tab1:
                                 # B. 새로운 영상 -> AI 분석 (비용 발생)
                                 status_area.warning(f"🤖 [AI 분석] '{v_title}' 분석 중...")
                                 
-                                # 1. 자막 추출 (자막 없으면 스킵)
+                                # 1. 자막 추출 (자막 없으면 스킵 - 사용자 요청: 설명글 대체 금지)
                                 transcript = hunter.get_transcript(vid)
+                                
                                 if not transcript:
-                                    st.toast(f"⏭️ 자막 없음 - 건너뜀: {v_title}", icon="⚠️")
+                                    st.toast(f"⏭️ 자막 없음 (품질 저하 방지) - 건너뜀: {v_title}", icon="⚠️")
                                     continue
                                 
                                 content = transcript[:15000]  # 길이 제한
+                                
+                                # 2. 적합성 분석 (생략 - 무조건 통과)
+                                relevance = {"score": 100, "reason": "Keyword Search Match"}
                                 
                                 # 2. 적합성 분석 (생략 - 무조건 통과)
                                 relevance = {"score": 100, "reason": "Keyword Search Match"}
