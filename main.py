@@ -1044,6 +1044,25 @@ with tab4:
     st.markdown("#### 🤖 AI 모델 테스트")
     st.caption("현재 사용 가능한 Gemini 모델을 확인합니다.")
     
+    col_list, col_test = st.columns(2)
+    
+    with col_list:
+        if st.button("📋 사용 가능한 모델 목록 조회", use_container_width=True):
+            import google.generativeai as genai
+            
+            try:
+                with st.spinner("모델 목록 조회 중..."):
+                    available_models = list(genai.list_models())
+                    
+                st.success(f"총 {len(available_models)}개의 모델을 찾았습니다:")
+                
+                for model in available_models:
+                    st.code(f"이름: {model.name}\n지원: {', '.join(model.supported_generation_methods)}", language=None)
+                    
+            except Exception as e:
+                st.error(f"모델 목록 조회 실패: {e}")
+    
+    with col_test:
     if st.button("🔍 모델 테스트 실행", type="primary"):
         import google.generativeai as genai
         
