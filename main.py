@@ -466,8 +466,13 @@ with tab1:
                     success_count = 0
                     
                     for idx, row in enumerate(selected_rows.itertuples()):
-                        video = row.raw_data
-                        vid = video["video_id"]
+                        vid = row.video_id
+                        # 원본 데이터에서 조회 (DataFrame 데이터 무결성 보장)
+                        video = next((v for v in results if v["video_id"] == vid), None)
+                        
+                        if not video:
+                            continue
+                            
                         v_title = video["title"]
                         
                         # 진행률 업데이트
