@@ -495,8 +495,29 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
-        self.model_name = "gemini-1.5-flash"
-        self.model = genai.GenerativeModel(self.model_name)
+        
+        # Google AI Studio에서 사용 가능한 모델들을 순서대로 시도
+        model_candidates = [
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-pro"
+        ]
+        
+        for model_name in model_candidates:
+            try:
+                self.model = genai.GenerativeModel(model_name)
+                # 간단한 테스트로 실제 작동 확인
+                test_response = self.model.generate_content("Hi")
+                self.model_name = model_name
+                print(f"✅ Successfully using model: {model_name}")
+                return
+            except Exception as e:
+                print(f"❌ {model_name} failed: {str(e)[:100]}")
+                continue
+        
+        # 모든 모델 실패 시 에러
+        raise Exception("사용 가능한 Gemini 모델을 찾을 수 없습니다. API 키 또는 할당량을 확인하세요.")
 
     def _generate_safe(self, prompt: str) -> str:
         """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
