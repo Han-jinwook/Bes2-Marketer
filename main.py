@@ -235,25 +235,35 @@ with st.sidebar:
     st.markdown("---")
     
     # 검색 기간
-    period_options = {
-        "최근 1일": 1,
-        "최근 1주일": 7,
-        "최근 1개월": 30,
-        "최근 3개월": 90
-    }
-    selected_period = st.selectbox(
-        "📅 검색 기간",
-        options=list(period_options.keys()),
-        index=2
-    )
-    
-    # 결과 수
-    max_results = st.slider(
-        "📊 키워드당 최대 결과",
-        min_value=1,
-        max_value=20,
-        value=5
-    )
+
+    # 검색 설정
+    with st.expander("⚙️ 검색 옵션", expanded=True):
+        max_results = st.slider(
+            "최대 검색 영상 수 (Candidates)",
+            min_value=10,
+            max_value=100,
+            value=30,
+            step=10,
+            help="AI가 분석할 후보 영상을 넓게 가져옵니다."
+        )
+        
+        published_after = st.slider(
+            "검색 기간 (일)",
+            min_value=7,
+            max_value=365,
+            value=30,
+            step=7,
+            help="최근 N일 이내에 업로드된 영상만 검색합니다."
+        )
+        
+        min_relevance = st.slider(
+            "🎯 최소 관련도 기준 (AI Score)",
+            min_value=0,
+            max_value=100,
+            value=70,
+            step=5,
+            help="AI 분석 결과, 이 점수보다 낮은 영상은 '가차 없이' 버립니다. (DB 저장 X)"
+        )
     
     st.markdown("---")
     
@@ -272,7 +282,6 @@ with st.sidebar:
             st.info("`.env` 파일을 확인해주세요.")
         else:
             keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
-            days = period_options[selected_period]
             
             with st.spinner("🔍 유튜브 검색 중..."):
                 try:
@@ -284,7 +293,7 @@ with st.sidebar:
                         videos = hunter.search_videos(
                             keyword=keyword,
                             max_results=max_results,
-                            published_after_days=days
+                            published_after_days=published_after
                         )
                         
                         for video in videos:
@@ -512,9 +521,11 @@ with tab1:
                                 # 2. 적합성 분석
                                 relevance = copywriter.analyze_relevance(content)
                                 
-                                if relevance["score"] < 40:
-                                    st.toast(f"📉 적합도 낮음({relevance['score']}점): {v_title}", icon="pass")
-                                    # 필요하면 여기서 continue 할 수도 있음 (사용자 선택에 따라)
+                                # [스마트 필터] 기준 점수 미달 시 PASS (DB 저장 안 함)
+                                if relevance["score"] < min_relevance:
+                                    st.toast(f"📉 기준 미달({relevance['score']}점 < {min_relevance}점): {v_title}", icon="🚫")
+                                    time.sleep(0.1)
+                                    continue
                                 
                                 # 3. 이메일 & 댓글 생성
                                 email = copywriter.generate_email(
