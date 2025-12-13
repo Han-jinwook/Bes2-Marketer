@@ -299,7 +299,7 @@ class YouTubeHunter:
             # 자막 목록 가져오기
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
-            # 수동 생성 자막 우선 시도
+            # 1순위: 수동 생성 한국어/영어 자막
             transcript = None
             for lang in languages:
                 try:
@@ -308,7 +308,7 @@ class YouTubeHunter:
                 except NoTranscriptFound:
                     continue
             
-            # 수동 자막 없으면 자동 생성 자막 시도
+            # 2순위: 자동 생성 한국어/영어 자막
             if not transcript:
                 for lang in languages:
                     try:
@@ -316,6 +316,16 @@ class YouTubeHunter:
                         break
                     except NoTranscriptFound:
                         continue
+            
+            # 3순위: 아무 언어나 (자동생성 포함)
+            if not transcript:
+                try:
+                    # 모든 자막 중 첫 번째 것 사용
+                    all_transcripts = list(transcript_list)
+                    if all_transcripts:
+                        transcript = all_transcripts[0]
+                except:
+                    pass
             
             if transcript:
                 # 자막 텍스트 추출 및 합치기
