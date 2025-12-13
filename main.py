@@ -6,6 +6,7 @@ AI 기반 유튜브 마케팅 자동화 대시보드
 import streamlit as st
 from datetime import datetime
 import time
+import pandas as pd
 
 from config import config
 from database import db, test_connection
