@@ -1063,42 +1063,42 @@ with tab4:
                 st.error(f"모델 목록 조회 실패: {e}")
     
     with col_test:
-    if st.button("🔍 모델 테스트 실행", type="primary"):
-        import google.generativeai as genai
-        
-        models_to_test = [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-pro"
-        ]
-        
-        working_model = None
-        results = []
-        
-        with st.spinner("모델 테스트 중..."):
-            for model_name in models_to_test:
-                try:
-                    test_model = genai.GenerativeModel(model_name)
-                    response = test_model.generate_content("안녕")
-                    results.append({"model": model_name, "status": "✅ 작동", "response": response.text[:50]})
-                    if not working_model:
-                        working_model = model_name
-                except Exception as e:
-                    results.append({"model": model_name, "status": "❌ 실패", "response": str(e)[:100]})
-        
-        # 결과 표시
-        for r in results:
-            if "✅" in r["status"]:
-                st.success(f"**{r['model']}**: {r['status']}")
+        if st.button("🔍 모델 테스트 실행", type="primary"):
+            import google.generativeai as genai
+            
+            models_to_test = [
+                "models/gemini-1.5-flash-latest",
+                "models/gemini-1.5-flash",
+                "models/gemini-1.5-pro",
+                "models/gemini-pro"
+            ]
+            
+            working_model = None
+            results = []
+            
+            with st.spinner("모델 테스트 중..."):
+                for model_name in models_to_test:
+                    try:
+                        test_model = genai.GenerativeModel(model_name)
+                        response = test_model.generate_content("안녕")
+                        results.append({"model": model_name, "status": "✅ 작동", "response": response.text[:50]})
+                        if not working_model:
+                            working_model = model_name
+                    except Exception as e:
+                        results.append({"model": model_name, "status": "❌ 실패", "response": str(e)[:100]})
+            
+            # 결과 표시
+            for r in results:
+                if "✅" in r["status"]:
+                    st.success(f"**{r['model']}**: {r['status']}")
+                else:
+                    st.error(f"**{r['model']}**: {r['status']}\n{r['response']}")
+            
+            if working_model:
+                st.balloons()
+                st.info(f"🎉 **추천 모델: `{working_model}`**\n\n이 모델명을 `logic.py` 496번째 줄에 고정하세요.")
             else:
-                st.error(f"**{r['model']}**: {r['status']}\n{r['response']}")
-        
-        if working_model:
-            st.balloons()
-            st.info(f"🎉 **추천 모델: `{working_model}`**\n\n이 모델명을 `logic.py` 496번째 줄에 고정하세요.")
-        else:
-            st.warning("⚠️ 모든 모델 실패. API 키 할당량을 확인하세요: https://aistudio.google.com/app/apikey")
+                st.warning("⚠️ 모든 모델 실패. API 키 할당량을 확인하세요: https://aistudio.google.com/app/apikey")
 
 
 # =============================================
