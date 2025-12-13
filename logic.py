@@ -495,20 +495,20 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
-        # 테스트 없이 바로 생성 (실제 사용 시점에 _generate_safe에서 에러 처리)
-        self.model_name = "gemini-1.5-flash-latest"
+        # 오전에 확인한 실제 작동하는 모델명 (models/ prefix 필수)
+        self.model_name = "models/gemini-1.5-flash-latest"
         self.model = genai.GenerativeModel(self.model_name)
 
     def _generate_safe(self, prompt: str) -> str:
         """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
         full_prompt = f"{self.SYSTEM_PROMPT}\n\n---\n[작업 요청]\n{prompt}"
         
-        # 여러 모델을 순서대로 시도
+        # 여러 모델을 순서대로 시도 (models/ prefix 필수)
         models_to_try = [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash", 
-            "gemini-1.5-pro",
-            "gemini-pro"
+            "models/gemini-1.5-flash-latest",
+            "models/gemini-1.5-flash",
+            "models/gemini-1.5-pro",
+            "models/gemini-pro"
         ]
         
         last_error = None
