@@ -629,141 +629,117 @@ with tab1:
 # =============================================
 
 with tab2:
-    st.markdown("### ✉️ 이메일 일괄 발송 관리")
+    st.markdown("### ✉️ 이메일 발송 관리")
     
-    # 1. 대기 중인 초안 가져오기
+    # 1. 대기 중인 초안 로드
     pending_drafts = db.get_pending_email_drafts_detailed()
     
     if not pending_drafts:
-        st.info("🎉 전송 대기 중인 이메일이 없습니다. (모두 처리됨)")
-        st.markdown("---")
+        st.info("🎉 전송 대기 중인 이메일이 없습니다!")
     else:
-        # 2. DataFrame 변환
-        table_data = []
-        for d in pending_drafts:
-            vid = d.get("videos", {}) or {}
-            lead = d.get("leads", {}) or {}
+        # Layout: Left (List) vs Right (Detail)
+        col_list, col_detail = st.columns([1, 2])
+        
+        with col_list:
+            st.markdown(f"**📌 대기 목록 ({len(pending_drafts)})**")
             
-            # 제목 추출
-            content = d.get("content", "")
-            lines = content.strip().split("\n")
-            subject = "제목 없음"
-            for line in lines:
-                if "제목:" in line or "Subject:" in line:
-                    subject = line.replace("제목:", "").replace("Subject:", "").strip()
-                    break
+            # 리스트 아이템 생성
+            options = {}
+            for d in pending_drafts:
+                lead = d.get("leads", {}) or {}
+                ch_name = lead.get("channel_name", "Unknown")
+                
+                # 라벨링 (오류 데이터 감지)
+                content = d.get("content") or ""
+                is_error = "오류" in content or "실패" in content or content.strip() == ""
+                label_icon = "⚠️" if is_error else "📄"
+                
+                # 유니크한 키 생성을 위해 ID 일부 포함
+                label = f"{label_icon} {ch_name}"
+                options[label] = d
             
-            table_data.append({
-                "선택": False,
-                "채널명": lead.get("channel_name", "Unknown"),
-                "이메일": lead.get("email", "미확인"),
-                "제목(미리보기)": subject[:40] + "..." if len(subject) > 40 else subject,
-                "작성일": d.get("created_at", "")[:10],
-                "id": d["id"],
-                "full_content": content
-            })
+            selected_label = st.radio(
+                "보낼 채널 선택",
+                options=list(options.keys()),
+                label_visibility="collapsed",
+                key="draft_selector"
+            )
             
-        df = pd.DataFrame(table_data)
-        
-        # 3. 데이터 에디터 (선택 가능)
-        st.caption(f"총 {len(df)}개의 대기 중인 제안서가 있습니다.")
-        edited_df = st.data_editor(
-            df,
-            column_config={
-                "선택": st.column_config.CheckboxColumn(
-                    "선택",
-                    help="전송할 항목 선택",
-                    default=False,
-                ),
-                "id": None, # 숨김
-                "full_content": None # 숨김
-            },
-            hide_index=True,
-            use_container_width=True,
-            key="email_editor"
-        )
-        
-        # 4. 일괄 전송 버튼
-        selected_rows = edited_df[edited_df["선택"]]
-        
-        col_btn, col_info = st.columns([1, 2])
-        
-        with col_btn:
-            from email_service import emailer
-            if st.button(f"🚀 선택한 {len(selected_rows)}건 일괄 전송", type="primary", use_container_width=True, disabled=len(selected_rows)==0):
-                if config.TEST_MODE:
-                    st.warning(f"🧪 테스트 모드: 실제 수신자 대신 {config.TEST_EMAIL}로 발송됩니다.")
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                success_count = 0
-                
-                for idx, row in enumerate(selected_rows.itertuples()):
-                    current_email = row.이메일
-                    current_subject = row._4  # 제목(미리보기), 실제로는 제목 추출 로직을 다시 써야 정확하지만 일단 생략하거나 full_content에서 파싱
-                    
-                    # 제목 재추출 (정확성을 위해)
-                    lines = row.full_content.strip().split("\n")
-                    real_subject = "Bes2 제안"
-                    real_body = row.full_content
-                    for i, line in enumerate(lines):
-                        if "제목:" in line or "Subject:" in line:
-                            real_subject = line.replace("제목:", "").replace("Subject:", "").strip()
-                            real_body = "\n".join(lines[i+1:]).strip()
-                            break
-                    
-                    status_text.text(f"📨 전송 중... ({idx+1}/{len(selected_rows)}): {row.채널명}")
-                    
-                    # 이메일 주소 확인
-                    if not current_email or "@" not in current_email:
-                        st.toast(f"❌ {row.채널명}: 이메일 주소 없음", icon="⚠️")
-                        continue
-                        
-                    # 전송 시도
-                    if emailer.send_email(current_email, real_subject, real_body):
-                        # DB 업데이트
-                        db.update_draft_status(row.id, "sent")
-                        success_count += 1
-                    else:
-                        st.toast(f"❌ {row.채널명}: 전송 실패", icon="🚫")
-                        
-                    progress_bar.progress((idx + 1) / len(selected_rows))
-                    time.sleep(0.5) # API 벤 방지용 딜레이
-                
-                status_text.text(f"✅ 완료! 총 {success_count}건 실패 {len(selected_rows)-success_count}건")
-                st.success(f"{success_count}건의 메일이 성공적으로 발송되었습니다.")
-                time.sleep(2)
-                st.rerun()
+            selected_draft = options[selected_label]
 
-    st.markdown("---")
-    st.markdown("### 🔍 개별 상세 보기 & 수정")
-    # 기존 카드 뷰 (선택된 게 없거나 별도로 수정하고 싶을 때 사용하도록 유지하되 간소화)
-    
-    # DB에서 다시 로드 (상태 변경 반영을 위해) 혹은 위 데이터 활용
-    if not pending_drafts:
-        st.write("표시할 항목이 없습니다.")
-    else:
-        # 간단하게 셀렉트박스로 선택해서 수정할 수 있게 제공
-        draft_options = {f"{d['leads'].get('channel_name')} ({d['leads'].get('email')})": d for d in pending_drafts}
-        selected_key = st.selectbox("수정할 초안 선택", list(draft_options.keys()))
-        
-        if selected_key:
-            data = draft_options[selected_key]
-            d_content = st.text_area("내용 수정", data["content"], height=300, key=f"edit_{data['id']}")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("💾 수정 저장", key=f"save_{data['id']}"):
-                    db.update_draft_content(data["id"], d_content)
-                    st.success("저장되었습니다.")
-                    time.sleep(1)
-                    st.rerun()
-            with col2:
-                if st.button("🗑️ 삭제", type="secondary", key=f"del_{data['id']}"):
-                    db.delete_draft(data["id"])
-                    st.warning("삭제되었습니다.")
-                    time.sleep(1)
-                    st.rerun()
+        with col_detail:
+            if selected_draft:
+                d = selected_draft
+                lead = d.get("leads", {}) or {}
+                to_email = lead.get('email')
+                
+                st.container(border=True).markdown(f"""
+                **받는 사람:** {lead.get('channel_name', 'Unknown')}  
+                **이메일:** `{to_email if to_email else '❌ 이메일 없음'}`  
+                **작성일:** {d.get('created_at', '')[:16]}
+                """)
+                
+                # 본문 에디터
+                content = d.get("content") or ""
+                
+                # 오류 데이터 시각적 경고
+                is_junk = "오류" in content or "실패" in content or content.strip() == ""
+                if is_junk:
+                    st.error("🚨 AI 생성 중 오류가 발생한 데이터입니다. 삭제해주세요.")
+                
+                edited_content = st.text_area(
+                    "내용 검토 및 수정",
+                    value=content,
+                    height=500,
+                    key=f"editor_{d['id']}"
+                )
+                
+                # 하단 액션 버튼
+                st.markdown("---")
+                c1, c2, c3 = st.columns([2, 1, 1])
+                
+                with c1:
+                    from email_service import emailer
+                    
+                    # 제목 추출 로직
+                    lines = edited_content.split('\n')
+                    subject = "Bes2 제안"
+                    body = edited_content
+                    for line in lines:
+                        if "제목:" in line or "Subject:" in line:
+                            subject = line.replace("제목:", "").replace("Subject:", "").strip()
+                            break
+                            
+                    btn_label = "🚀 이메일 전송"
+                    if config.TEST_MODE:
+                        btn_label += " (테스트 모드)"
+                        
+                    if st.button(btn_label, type="primary", use_container_width=True, key=f"snd_{d['id']}", disabled=not to_email or is_junk):
+                        if config.TEST_MODE:
+                            st.toast(f"🧪 테스트 발송: {config.TEST_EMAIL}")
+                        
+                        if emailer.send_email(to_email, subject, edited_content):
+                            db.update_draft_status(d['id'], "sent")
+                            st.success("✅ 전송 완료!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("전송 실패. 설정을 확인하세요.")
+
+                with c2:
+                    if st.button("💾 저장", use_container_width=True, key=f"sav_{d['id']}"):
+                         db.update_draft_content(d['id'], edited_content)
+                         st.toast("✅ 내용이 저장되었습니다.")
+                         time.sleep(0.5)
+                         st.rerun()
+                         
+                with c3:
+                    if st.button("🗑️ 삭제", type="secondary", use_container_width=True, key=f"del_{d['id']}"):
+                        db.delete_draft(d['id'])
+                        st.toast("🗑️ 삭제되었습니다.")
+                        time.sleep(0.5)
+                        st.rerun()
 
 # =============================================
 # 탭 3: 댓글/커뮤니티 마케팅
