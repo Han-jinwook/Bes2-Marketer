@@ -604,7 +604,7 @@ with tab1:
                                 
                         except Exception as e:
                             print(f"Error processing {vid}: {e}")
-                            st.toast(f"❌ 오류 발생: {v_title}", icon="⚠️")
+                            st.error(f"❌ 오류 상세: {e}")
                             
                     status_area.empty()
                     if success_count > 0:

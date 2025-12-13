@@ -495,12 +495,27 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
+        # 호환성을 위해 system_instruction 제거하고 프롬프트에 직접 통합
+        # 기본 모델 시도
+        self.model_name = "gemini-1.5-flash"
+        self.model = genai.GenerativeModel(self.model_name)
+
+    def _generate_safe(self, prompt: str) -> str:
+        """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
+        full_prompt = f"{self.SYSTEM_PROMPT}\n\n---\n[작업 요청]\n{prompt}"
         
-        # 모델 설정 (가장 안정적인 최신 1.5 Flash 버전 사용)
-        self.model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=self.SYSTEM_PROMPT
-        )
+        try:
+            response = self.model.generate_content(full_prompt)
+            return response.text
+        except Exception as eFirst:
+            print(f"Primary model ({self.model_name}) failed: {eFirst}")
+            try:
+                # 2차 시도: gemini-pro (fallback)
+                fallback = genai.GenerativeModel("gemini-pro")
+                response = fallback.generate_content(full_prompt)
+                return response.text
+            except Exception as eSecond:
+                return f"[AI 에러] 모델 생성 실패. API 키나 할당량을 확인하세요.\n1차: {eFirst}\n2차: {eSecond}"
     
     def generate_email(
         self,
@@ -559,12 +574,7 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
 - 제목: (매력적이지만 스팸 같지 않게)
 - 본문: 400~600자"""
 
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Email generation error: {e}")
-            return f"[오류] 이메일 생성 실패: {e}"
+        return self._generate_safe(prompt)
     
     def generate_comment(
         self,
@@ -613,12 +623,7 @@ Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100%
 - 100~150자로 짧고 자연스럽게
 - 이모지는 1~2개만 자연스럽게"""
 
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Comment generation error: {e}")
-            return f"[오류] 댓글 생성 실패: {e}"
+        return self._generate_safe(prompt)
     
     def summarize_video(self, video_content: str) -> str:
         """
