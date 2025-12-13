@@ -460,7 +460,7 @@ with tab1:
             with col_action:
                 if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True):
                     
-                    st.info(f"ℹ️ 현재 '관련도 커트라인'은 **{min_relevance}점**입니다. 이보다 낮으면 저장되지 않습니다.")
+                    pass
                     
                     progress_bar = st.progress(0)
                     status_area = st.empty()
@@ -520,24 +520,18 @@ with tab1:
                                 # B. 새로운 영상 -> AI 분석 (비용 발생)
                                 status_area.warning(f"🤖 [AI 분석] '{v_title}' 분석 중...")
                                 
-                                # 1. 자막 추출
+                                # 1. 자막 추출 (실패 시 설명글로 대체)
                                 transcript = hunter.get_transcript(vid)
-                                if not transcript:
-                                    st.toast(f"⚠️ 자막 없음: {v_title}", icon="❌")
-                                    continue
-                                    
-                                content = transcript[:15000] # 길이 제한
+                                if transcript:
+                                    content = transcript[:15000] # 길이 제한
+                                else:
+                                    # Fallback to description
+                                    desc = video.get('description', '')
+                                    content = f"[자막 없음 - 설명글로 대체]\n제목: {v_title}\n내용: {desc}"
+                                    st.toast(f"⚠️ 자막 없음 -> 설명글로 분석: {v_title}", icon="ℹ️")
                                 
-                                # 2. 적합성 분석
-                                relevance = copywriter.analyze_relevance(content)
-                                
-                                # [스마트 필터] 기준 점수 미달 시 PASS (DB 저장 안 함)
-                                if relevance["score"] < min_relevance:
-                                    msg = f"📉 점수 미달 ({relevance['score']}점 < {min_relevance}점): {v_title}"
-                                    st.toast(msg, icon="🚫")
-                                    status_area.warning(msg)
-                                    time.sleep(1)
-                                    continue
+                                # 2. 적합성 분석 (생략 - 무조건 통과)
+                                relevance = {"score": 100, "reason": "Keyword Search Match"}
                                 
                                 # 3. 이메일 & 댓글 생성
                                 email = copywriter.generate_email(
