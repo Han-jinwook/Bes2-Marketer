@@ -125,6 +125,14 @@ class YouTubeHunter:
                         
                     # 합격!
                     # 채널 정보 추가 수집을 위해 포맷팅
+                    video_data = {
+                        "video_id": vid,
+                        "title": title,
+                        "description": description,
+                        "thumbnail_url": snippet["thumbnails"]["high"]["url"],
+                        "published_at": snippet["publishedAt"],
+                        "channel_id": snippet["channelId"],
+                        "channel_name": snippet["channelTitle"],
                         "video_url": f"https://www.youtube.com/watch?v={vid}"
                     }
                     collected_items.append(video_data)
