@@ -322,8 +322,14 @@ with st.sidebar:
                         
                         progress_bar.progress((i + 1) / len(keywords))
                     
+                    # 🔍 60개 검색 결과 즉시 DB 저장 (Deep Search 완성)
+                    if all_videos:
+                        with st.spinner("💾 검색된 모든 영상을 DB에 동기화 중..."):
+                            saved_count = db.upsert_scanned_videos(all_videos)
+                            st.text(f"Synced {saved_count} videos to DB.")
+                    
                     st.session_state.search_results = all_videos
-                    st.success(f"✅ {len(all_videos)}개 영상 수집 완료!")
+                    st.success(f"✅ {len(all_videos)}개 영상 수집 완료! (DB 동기화 완료)")
                     
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
@@ -428,6 +434,7 @@ with tab1:
                 "채널명": v["channel_name"],
                 "게시일": v["published_at"][:10],
                 "조회수": f"{view_count:,}",
+                "링크": v["video_url"],
                 "video_id": v["video_id"],
                 "raw_data": v # 전체 데이터 보존
             })
@@ -442,7 +449,10 @@ with tab1:
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False),
                 "썸네일": st.column_config.ImageColumn("썸네일", width="small"),
-                "제목": st.column_config.TextColumn("제목", width="medium"),
+                "제목": st.column_config.TextColumn("제목", width="large"),
+                "조회수": st.column_config.TextColumn("조회수", width="small"),
+                "게시일": st.column_config.TextColumn("게시일", width="small"),
+                "링크": st.column_config.LinkColumn("링크", display_text="보기", width="small"),
                 "video_id": None, # 숨김
                 "raw_data": None  # 숨김
             },

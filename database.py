@@ -142,6 +142,61 @@ class Database:
         response = self.client.table("videos").select("*").eq("id", id).execute()
         return response.data[0] if response.data else None
     
+    def upsert_scanned_videos(self, videos: list[dict]) -> int:
+        """수집된 영상과 채널 정보를 한꺼번에 저장/업데이트 (Upsert)"""
+        count = 0
+        for v in videos:
+            try:
+                # 1. 리드(채널)Upsert
+                # 채널 ID로 기존 리드 확인
+                lead = self.get_lead_by_channel_id(v["channel_id"])
+                
+                if not lead:
+                    # 없으면 새로 생성
+                    lead = self.create_lead(
+                        channel_name=v["channel_name"],
+                        channel_id=v["channel_id"],
+                        subscriber_count=v.get("channel_info", {}).get("subscriber_count", 0),
+                        thumbnail_url=v.get("thumbnail_url"), # 채널 썸네일 대신 영상 썸네일이라도 일단 활용
+                        email=v.get("channel_info", {}).get("email")
+                    )
+                else:
+                    # 있으면 정보 업데이트 (이메일 등 최신화)
+                    update_data = {}
+                    if not lead.get("email") and v.get("channel_info", {}).get("email"):
+                        update_data["email"] = v["channel_info"]["email"]
+                    if v.get("channel_info", {}).get("subscriber_count"):
+                        update_data["subscriber_count"] = v["channel_info"]["subscriber_count"]
+                    
+                    if update_data:
+                        self.update_lead(lead["id"], **update_data)
+                
+                # 2. 영상 Upsert
+                # 조회수 숫자 변환
+                vc = v.get("view_count", 0)
+                if isinstance(vc, str):
+                    vc = int(vc.replace(',', '')) if vc.replace(',', '').isdigit() else 0
+                
+                v_data = {
+                    "video_id": v["video_id"],
+                    "title": v["title"],
+                    "lead_id": lead["id"],
+                    "upload_date": v["published_at"][:10],
+                    "view_count": vc,
+                    "video_url": v["video_url"],
+                    "thumbnail_url": v["thumbnail_url"],
+                    "search_keyword": v.get("search_keyword")
+                }
+                
+                # Supabase upsert (video_id 기준으로 중복 체크)
+                self.client.table("videos").upsert(v_data, on_conflict="video_id").execute()
+                count += 1
+                
+            except Exception as e:
+                print(f"Error upserting video {v['video_id']}: {e}")
+                
+        return count
+
     def get_video_by_video_id(self, video_id: str) -> Optional[dict]:
         """YouTube 영상 ID로 조회"""
         try:
