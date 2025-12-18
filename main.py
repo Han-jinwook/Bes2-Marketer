@@ -266,16 +266,24 @@ with st.sidebar:
     published_after = current_strategy["days"]
     min_relevance = current_strategy["min_rel"]
     
-    with st.expander("⚙️ 고급 설정 (수집 양)", expanded=False):
+    with st.expander("📊 수집 양 설정 (일일 목표)", expanded=True):
         max_results = st.slider(
-            "한번에 수집할 영상 수",
-            min_value=10,
-            max_value=100,
-            value=30,
-            step=10,
-            help="많을수록 시간이 오래 걸립니다."
+            "하루 목표 수집량",
+            min_value=100,
+            max_value=500,
+            value=100,
+            step=50,
+            help="한 번 서칭할 때 최대 몇 개의 영상을 가져올지 설정합니다."
         )
     
+    # [NEW] 최소 조회수 설정 (품질 필터)
+    min_view_count = st.select_slider(
+        "최소 조회수 (품질 필터)",
+        options=[0, 100, 500, 1000, 5000, 10000],
+        value=100,
+        help="이 조회수 미만인 영상은 수집하지 않습니다."
+    )
+
     st.markdown("---")
     
     # 검색 버튼
@@ -304,7 +312,8 @@ with st.sidebar:
                         videos = hunter.search_videos(
                             keyword=keyword,
                             max_results=max_results,
-                            published_after_days=published_after
+                            published_after_days=published_after,
+                            min_view_count=min_view_count # 전달
                         )
                         
                         for video in videos:

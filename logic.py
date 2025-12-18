@@ -32,7 +32,7 @@ class YouTubeHunter:
             "youtube", "v3",
             developerKey=config.YOUTUBE_API_KEY
         )
-    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30) -> list[dict]:
+    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0) -> list[dict]:
         """
         유튜브 영상 검색 (Deep Search 적용)
         - DB에 없는 '새로운' 영상이 max_results만큼 모일 때까지 페이지를 넘겨가며 검색
@@ -51,9 +51,9 @@ class YouTubeHunter:
         collected_items = []
         next_page_token = None
         
-        # 최대 5페이지까지 탐색 (API 비용 안전장치)
-        # 한 페이지당 50개씩 요청하므로 최대 250개 후보군 탐색
-        for page_num in range(5):
+        # 최대 10페이지까지 탐색 (API 비용 안전장치)
+        # 한 페이지당 50개씩 요청하므로 최대 500개 후보군 탐색
+        for page_num in range(10):
             try:
                 search_response = self.youtube.search().list(
                     q=keyword,
@@ -170,9 +170,15 @@ class YouTubeHunter:
                         cid = v["channel_id"]
                         
                         # 통계 병합
+                        view_count = 0
                         if vid in stats_map:
-                            v["view_count"] = int(stats_map[vid].get("viewCount", 0))
+                            view_count = int(stats_map[vid].get("viewCount", 0))
+                            v["view_count"] = view_count
                         
+                        # [NEW] 최소 조회수 필터링 (품질 관리)
+                        if min_view_count > 0 and view_count < min_view_count:
+                            continue
+
                         # 채널 정보 및 이메일 추출 병합
                         chan_info = channel_map.get(cid, {})
                         
