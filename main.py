@@ -309,12 +309,16 @@ with st.sidebar:
                     
                     for i, keyword in enumerate(keywords):
                         st.text(f"Scanning: {keyword}")
-                        videos = hunter.search_videos(
+                        videos, total_count = hunter.search_videos(
                             keyword=keyword,
                             max_results=max_results,
                             published_after_days=published_after,
-                            min_view_count=min_view_count # 전달
+                            min_view_count=min_view_count
                         )
+                        
+                        if total_count > 0:
+                            st.caption(f"📊 YouTube 검색 결과: 약 {total_count:,}개의 영상이 발견되었습니다.")
+
                         
                         for video in videos:
                             # 검색 단계에서는 메타데이터만 수집 (자막은 분석 단계에서)
