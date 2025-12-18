@@ -332,7 +332,9 @@ with st.sidebar:
                     st.success(f"✅ {len(all_videos)}개 영상 수집 완료! (DB 동기화 완료)")
                     
                 except Exception as e:
-                    st.error(f"오류 발생: {e}")
+                    import traceback
+                    st.error(f"❌ 오류 발생: {str(e)}")
+                    st.expander("상세 에러 로그 보기").code(traceback.format_exc())
     
     st.markdown("---")
     
