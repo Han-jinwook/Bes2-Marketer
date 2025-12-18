@@ -32,115 +32,145 @@ class YouTubeHunter:
             "youtube", "v3",
             developerKey=config.YOUTUBE_API_KEY
         )
-    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0) -> tuple[list[dict], int]:
+    
+    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0, require_email: bool = False) -> tuple[list[dict], int]:
         """
         유튜브 영상 검색 (Deep Search 적용)
-        - 리턴: (수집된 영상 리스트, 유튜브가 알려준 해당 키워드의 총 영상 개수)
+        - require_email=True 시 이메일 없는 영상은 결과에서 제외
         """
-        from database import db  # Lazy import to avoid circular dependency
+        from database import db
         
-        # 날짜 계산
+        # 1. 날짜 및 초기값 설정
         published_after = (datetime.utcnow() - timedelta(days=published_after_days)).isoformat("T") + "Z"
-        
         print(f"Searching for '{keyword}' after {published_after}...")
         
-        # 0. DB에 있는 데이터 미리 가져오기 (중복 필터링용)
         known_ids = db.get_known_video_ids()
-        
         collected_items = []
         next_page_token = None
+        total_results_approx = 0
         
-        # 최대 10페이지까지 탐색 (API 비용 안전장치)
-        # 한 페이지당 50개씩 요청하므로 최대 500개 후보군 탐색
+        # 2. 1차 검색 (최대 10페이지 = 500개 후보군 탐색)
         for page_num in range(10):
             try:
                 search_response = self.youtube.search().list(
-                    q=keyword,
-                    part="id,snippet",
-                    maxResults=50, # 한번에 최대로 가져와서 필터링 (가성비)
-                    order="date",
-                    publishedAfter=published_after,
-                    type="video",
-                    pageToken=next_page_token
+                    q=keyword, part="id,snippet", maxResults=50,
+                    order="date", publishedAfter=published_after, type="video", pageToken=next_page_token
                 ).execute()
                 
+                if page_num == 0:
+                    total_results_approx = search_response.get("pageInfo", {}).get("totalResults", 0)
+
                 items = search_response.get("items", [])
-                if not items:
-                    break
-                    
-                # 필터링 로직
-                import re
-                def has_korean(text):
-                    return bool(re.search(r'[가-힣]', text))
+                if not items: break
                 
+                # 필터링 헬퍼
+                import re
+                def has_korean(text): return bool(re.search(r'[가-힣]', text))
                 required_terms = keyword.split()
                 
                 for item in items:
-                    # 충분히 모았으면 종료
-                    if len(collected_items) >= max_results:
-                        break
-                        
+                    if len(collected_items) >= max_results: break
                     vid = item["id"]["videoId"]
                     snippet = item["snippet"]
-                    title = snippet["title"]
-                    description = snippet["description"]
                     
-                    # 1. 중복 체크 (DB에 있으면 스킵 - Deep Search 핵심)
-                    if vid in known_ids:
-                        continue
-                        
-                    # 2. 한국어 체크
-                    if not has_korean(title):
-                        continue
-                        
-                    # 3. 키워드 AND 조건 체크
-                    search_context = (title + " " + description).lower()
-                    if not all(term.lower() in search_context for term in required_terms):
-                        continue
-                        
-                    # 합격!
-                    # 채널 정보 추가 수집을 위해 포맷팅
-                    video_data = {
+                    # (1) DB 중복 체크
+                    if vid in known_ids: continue
+                    # (2) 한국어 체크
+                    if not has_korean(snippet["title"]): continue
+                    # (3) 키워드 매칭
+                    search_context = (snippet["title"] + " " + snippet["description"]).lower()
+                    if not all(term.lower() in search_context for term in required_terms): continue
+                    
+                    collected_items.append({
                         "video_id": vid,
-                        "title": title,
-                        "description": description,
+                        "title": snippet["title"],
+                        "description": snippet["description"], # 영상 설명 (이메일 추출용 1순위)
                         "thumbnail_url": snippet["thumbnails"]["high"]["url"],
                         "published_at": snippet["publishedAt"],
                         "channel_id": snippet["channelId"],
                         "channel_name": snippet["channelTitle"],
                         "video_url": f"https://www.youtube.com/watch?v={vid}"
-                    }
-                    collected_items.append(video_data)
+                    })
                 
-                # 목표 달성 체크
-                if len(collected_items) >= max_results:
-                    break
-                    
-                # 총 결과 수 확인 (첫 페이지에서만)
-                if page_num == 0:
-                    total_results_approx = search_response.get("pageInfo", {}).get("totalResults", 0)
-
-                items = search_response.get("items", [])
-                if not items:
-                    break
-                    
-                # ... (필터링 로직 생략, 기존 코드 유지) ...
+                if len(collected_items) >= max_results: break
                 
-                # [NEW] API 차단 방지 딜레이 (1~3초 랜덤)
-                import time
-                import random
+                next_page_token = search_response.get("nextPageToken")
+                if not next_page_token: break
+                
+                # [Safety] 랜덤 딜레이
+                import time, random
                 time.sleep(random.uniform(1, 3))
-
-                # ... (중략) ...
-
-                # 상세 정보 조회 부분에서도 리턴값 수정 필요
-                return final_items, total_results_approx
                 
+                print(f"Page {page_num+1} done. Collected candidates: {len(collected_items)}")
+
+            except Exception as e:
+                print(f"Search API Error: {e}")
+                break
+        
+        # 3. 2차 상세 조회 (통계 확인 및 이메일 사냥)
+        final_items = []
+        if collected_items:
+            try:
+                # 50개씩 끊어서 처리 (Detail API Quota 절약)
+                filtered_candidates = collected_items[:max_results] # 일단 최대치만큼 자름
+                chunk_size = 50
+                
+                for i in range(0, len(filtered_candidates), chunk_size):
+                    chunk = filtered_candidates[i:i + chunk_size]
+                    video_ids = [v["video_id"] for v in chunk]
+                    
+                    # (1) 영상 통계 (조회수)
+                    stats_resp = self.youtube.videos().list(part="statistics", id=",".join(video_ids)).execute()
+                    stats_map = {item["id"]: item["statistics"] for item in stats_resp.get("items", [])}
+                    
+                    # (2) 채널 정보 (설명글에서 이메일 찾기용 2순위)
+                    channel_ids = list({v["channel_id"] for v in chunk})
+                    channel_map = {}
+                    for k in range(0, len(channel_ids), 50):
+                        c_chunk = channel_ids[k:k+50]
+                        chan_resp = self.youtube.channels().list(part="statistics,snippet", id=",".join(c_chunk)).execute()
+                        for c_item in chan_resp.get("items", []):
+                            channel_map[c_item["id"]] = {
+                                "subscriber_count": int(c_item["statistics"].get("subscriberCount", 0)),
+                                "description": c_item["snippet"].get("description", "")
+                            }
+                    
+                    for v in chunk:
+                        vid = v["video_id"]
+                        cid = v["channel_id"]
+                        
+                        # 조회수 필터링
+                        view_count = 0
+                        if vid in stats_map:
+                            view_count = int(stats_map[vid].get("viewCount", 0))
+                            v["view_count"] = view_count
+                        
+                        if min_view_count > 0 and view_count < min_view_count:
+                            continue
+                            
+                        # 이메일 추출 (영상 설명이 1순위 -> 채널 설명이 2순위)
+                        chan_info = channel_map.get(cid, {})
+                        email = self._extract_email_from_text(v["description"])
+                        if not email:
+                            email = self._extract_email_from_text(chan_info.get("description", ""))
+                            
+                        # 이메일 필수 필터링
+                        if require_email and not email:
+                            continue
+                            
+                        v["channel_info"] = {
+                            "subscriber_count": chan_info.get("subscriber_count", 0),
+                            "email": email
+                        }
+                        final_items.append(v)
+            
             except Exception as e:
                 print(f"Detail API Error: {e}")
+                # 에러 나더라도 수집한 건 반환
                 return collected_items[:max_results], 0
-                
-        return collected_items[:max_results], total_results_approx
+
+        # 필터링 후 최종 결과 리턴
+        return final_items, total_results_approx
     
     def _extract_email_from_text(self, text: str) -> Optional[str]:
         """텍스트에서 이메일 패턴 추출"""
@@ -212,19 +242,12 @@ class YouTubeHunter:
                     "video_count": int(stats.get("videoCount", 0)),
                     "view_count": int(stats.get("viewCount", 0)),
                     # 이메일 추출 시도 (설명에서)
-                    "email": self._extract_email(snippet["description"])
+                    "email": self._extract_email_from_text(snippet["description"])
                 }
         except Exception as e:
             print(f"Error getting channel info: {e}")
         
         return None
-    
-    def _extract_email(self, text: str) -> Optional[str]:
-        """텍스트에서 이메일 주소 추출"""
-        import re
-        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-        matches = re.findall(email_pattern, text)
-        return matches[0] if matches else None
     
     def get_transcript(
         self,
@@ -248,708 +271,101 @@ class YouTubeHunter:
             else:
                 transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-            # 디버깅용: 발견된 모든 자막 언어 출력
+            # 2. 우선적으로 수동 생성 자막 찾기
             try:
-                available_langs = [f"{t.language_code}({'auto' if t.is_generated else 'manual'})" for t in transcript_list]
-                print(f"   found languages: {available_langs}")
-            except:
-                pass
-            
-            transcript = None
-            
-            # 2. 우선순위 언어 시도 (한국어 -> 영어)
-            try:
-                transcript = transcript_list.find_transcript(languages)
-            except:
-                pass
-
-            # 3. 실패시: 'ko'가 들어간 자막이 있는지 수동 검색 (자동생성 포함)
-            if not transcript:
-                for t in transcript_list:
-                    if 'ko' in t.language_code.lower():
-                        transcript = t
-                        print(f"   found alternative Korean: {t.language_code}")
-                        break
-            
-            # 4. 최후의 보루: 그냥 첫 번째 자막 가져오기
-            if not transcript:
+                transcript = transcript_list.find_manually_created_transcript(languages)
+                print("   ✅ Found Manual Transcript")
+            except NoTranscriptFound:
+                # 없으면 자동 생성 자막 찾기
                 try:
-                    transcript = next(iter(transcript_list))
-                    print(f"   [Fallback] Taking first available: {transcript.language_code}")
-                except:
-                    pass
-
-            if transcript:
-                # 자막 텍스트 추출 (JSON -> Text 변환)
-                transcript_data = transcript.fetch()
-                full_text = " ".join([entry["text"] for entry in transcript_data])
-                return full_text
-                
+                    print("   ⚠️ No Manual, trying Auto-generated...")
+                    transcript = transcript_list.find_generated_transcript(languages)
+                    print("   ✅ Found Auto-generated Transcript")
+                except NoTranscriptFound:
+                    print("   ❌ No transcript found in requested languages.")
+                    return None
+            
+            # 3. 자막 가져오기
+            script = transcript.fetch()
+            
+            # 텍스트만 합치기
+            full_text = " ".join([entry['text'] for entry in script])
+            return full_text
+            
+        except TranscriptsDisabled:
+            print(f"   ❌ Transcripts are disabled for video {video_id}")
+            return None
         except Exception as e:
-            print(f"[Error] Transcript fetch failed for {video_id}: {e}")
-            
-        # 5. yt-dlp를 이용한 강력한 최후의 수단 (Python API)
-        try:
-            print(f"[yt-dlp] Trying Python API for {video_id}...")
-            import yt_dlp
-            import tempfile
-            import os
-            
-            # 시스템 임시 디렉토리 사용
-            temp_dir = tempfile.gettempdir()
-            output_template = os.path.join(temp_dir, f"bes2_temp_{video_id}")
-            
-            # yt-dlp 옵션 설정
-            ydl_opts = {
-                'writesubtitles': True,
-                'writeautomaticsub': True,
-                'subtitleslangs': ['ko', 'en'],
-                'skip_download': True,
-                'outtmpl': output_template,
-                'quiet': True,
-                'no_warnings': True,
-            }
-            
-            # yt-dlp 실행
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-                
-                # 자막 데이터 직접 추출
-                if 'subtitles' in info or 'automatic_captions' in info:
-                    # 우선순위: 수동 자막(ko) > 자동 자막(ko) > 수동(en) > 자동(en)
-                    subtitles = info.get('subtitles', {})
-                    auto_captions = info.get('automatic_captions', {})
-                    
-                    subtitle_data = None
-                    
-                    # 1. 한국어 수동 자막
-                    if 'ko' in subtitles:
-                        subtitle_data = subtitles['ko']
-                    # 2. 한국어 자동 자막
-                    elif 'ko' in auto_captions:
-                        subtitle_data = auto_captions['ko']
-                    # 3. 영어 수동 자막
-                    elif 'en' in subtitles:
-                        subtitle_data = subtitles['en']
-                    # 4. 영어 자동 자막
-                    elif 'en' in auto_captions:
-                        subtitle_data = auto_captions['en']
-                    
-                    if subtitle_data:
-                        # VTT 형식 찾기
-                        vtt_url = None
-                        for sub in subtitle_data:
-                            if sub.get('ext') == 'vtt':
-                                vtt_url = sub.get('url')
-                                break
-                        
-                        if vtt_url:
-                            # VTT 다운로드 및 파싱
-                            import urllib.request
-                            
-                            response = urllib.request.urlopen(vtt_url)
-                            vtt_content = response.read().decode('utf-8')
-                            
-                            # VTT 파싱
-                            full_text = ""
-                            seen_lines = set()
-                            
-                            for line in vtt_content.split('\n'):
-                                line = line.strip()
-                                # 타임스탬프, 헤더, 빈 줄 등 제외
-                                if "-->" in line or line == "WEBVTT" or not line:
-                                    continue
-                                if line.isdigit():
-                                    continue
-                                # HTML 태그 제거
-                                import re
-                                line = re.sub(r'<[^>]+>', '', line)
-                                # 중복 제거
-                                if line and line not in seen_lines:
-                                    full_text += line + " "
-                                    seen_lines.add(line)
-                            
-                            if full_text:
-                                print(f"[yt-dlp] Success! Extracted {len(full_text)} chars")
-                                return full_text.strip()
-
-        except Exception as e:
-            print(f"[yt-dlp] Failed: {e}")
-        
-        return None
-    
-    def get_video_content(self, video_id: str, description: str = "") -> dict:
-        """
-        영상 콘텐츠 가져오기 (자막 우선, 없으면 설명)
-        
-        Returns:
-            {
-                "content": str,  # 자막 또는 설명
-                "source": str,   # "transcript" 또는 "description"
-            }
-        """
-        transcript = self.get_transcript(video_id)
-        
-        if transcript:
-            return {
-                "content": transcript,
-                "source": "transcript"
-            }
-        else:
-            return {
-                "content": description,
-                "source": "description"
-            }
-    
-    def hunt(
-        self,
-        keywords: Optional[list[str]] = None,
-        max_results_per_keyword: int = 5,
-        save_to_db: bool = True
-    ) -> list[dict]:
-        """
-        키워드 기반 영상 사냥 (전체 프로세스)
-        
-        Args:
-            keywords: 검색 키워드 목록 (None이면 config에서 가져옴)
-            max_results_per_keyword: 키워드당 최대 결과 수
-            save_to_db: DB에 저장 여부
-            
-        Returns:
-            수집된 영상 정보 리스트
-        """
-        if keywords is None:
-            keywords = config.SEARCH_KEYWORDS
-        
-        all_videos = []
-        
-        for keyword in keywords:
-            print(f"🔍 Searching: {keyword}")
-            videos = self.search_videos(keyword, max_results=max_results_per_keyword)
-            
-            for video in videos:
-                # 이미 DB에 있는지 확인
-                if save_to_db and db.video_exists(video["video_id"]):
-                    print(f"  ⏭️ Skip (already exists): {video['title'][:30]}...")
-                    continue
-                
-                # 자막/설명 가져오기
-                content_info = self.get_video_content(
-                    video["video_id"],
-                    video["description"]
-                )
-                video["transcript_text"] = content_info["content"]
-                video["content_source"] = content_info["source"]
-                
-                # 채널 정보 가져오기
-                channel_info = self.get_channel_info(video["channel_id"])
-                if channel_info:
-                    video["channel_info"] = channel_info
-                
-                if save_to_db:
-                    # 리드(채널) 저장
-                    existing_lead = db.get_lead_by_channel_id(video["channel_id"])
-                    if existing_lead:
-                        lead_id = existing_lead["id"]
-                    else:
-                        lead = db.create_lead(
-                            channel_name=video["channel_name"],
-                            channel_id=video["channel_id"],
-                            subscriber_count=channel_info.get("subscriber_count", 0) if channel_info else 0,
-                            email=channel_info.get("email") if channel_info else None,
-                            keywords=[keyword],
-                            channel_url=channel_info.get("channel_url") if channel_info else None,
-                            thumbnail_url=channel_info.get("thumbnail_url") if channel_info else None,
-                            description=channel_info.get("description") if channel_info else None
-                        )
-                        lead_id = lead["id"]
-                    
-                    # 영상 저장
-                    db.create_video(
-                        video_id=video["video_id"],
-                        title=video["title"],
-                        lead_id=lead_id,
-                        upload_date=video["published_at"][:10],
-                        view_count=video["view_count"],
-                        like_count=video["like_count"],
-                        comment_count=video["comment_count"],
-                        video_url=video["video_url"],
-                        thumbnail_url=video["thumbnail_url"],
-                        transcript_text=video["transcript_text"],
-                        search_keyword=keyword
-                    )
-                    print(f"  ✅ Saved: {video['title'][:40]}...")
-                
-                all_videos.append(video)
-        
-        print(f"\n📊 Total collected: {len(all_videos)} videos")
-        return all_videos
+            print(f"   ❌ Error fetching transcript: {e}")
+            return None
 
 
 # =============================================
-# AI Copywriter - Gemini 기반 마케팅 콘텐츠 생성
+# AI Copywriter - Gemini 기반 분석 및 작성
 # =============================================
 
 class AICopywriter:
-    """Gemini AI 기반 마케팅 카피라이터"""
-    
-    SYSTEM_PROMPT = """너는 '진정성 있는 마케터'야. 단순히 앱을 홍보하는 게 아니라, 구독자들의 돈과 개인정보를 진심으로 아껴주는 '동료'의 입장에서 제안 메일을 써야 해.
-
-═══════════════════════════════════════════════════
-🔥 Bes2의 핵심 철학 (이 정신이 글에 녹아들어야 함)
-═══════════════════════════════════════════════════
-
-【1. Underdog 정신 - 사용자 편에 선 유일한 앱】
-수많은 유료 앱들과 거대 클라우드 기업들은 "용량이 부족하시네요, 월 ₩2,900만 내세요"라고 합니다.
-우리는 오직 사용자 편에 섰습니다. 100% 무료, 온디바이스, 평생 무료입니다.
-
-【2. Privacy First - "당신의 추억은 당신의 폰 안에만"】
-다른 앱들은 "AI 분석"을 핑계로 사진을 서버로 가져갑니다.
-Bes2는 서버 전송이 **아예 없습니다**. 비행기 모드에서도 100% 작동합니다.
-개인정보 보호는 단순 기능이 아니라, 우리의 타협할 수 없는 신념입니다.
-
-【3. Smart Backdoor Strategy - "똑똑하게 백업하고 돈 아끼자"】
-구글포토나 클라우드를 쓰지 말라는 게 아닙니다.
-"쓰레기 사진까지 백업해서 돈 낭비하지 말고, Bes2로 알맹이만 남긴 뒤 똑똑하게 백업하라"는 현실적이고 경제적인 솔루션을 제시해야 합니다.
-→ Bes2는 스크린샷, 중복 사진, 흔들린 사진을 **90%까지 완벽하게 분류해서 떠먹여 드립니다.**
-→ 사용자는 마지막 **10%의 '삭제 결정(Yes/No)'만 하세요.**
-→ 이 '비서' 같은 기능으로 용량을 확보하고, 알짜배기만 클라우드에 백업하여 돈을 아끼는 전략입니다.
-
-═══════════════════════════════════════════════════
-✍️ 글쓰기 지침
-═══════════════════════════════════════════════════
-
-【톤앤매너】
-- "이거 진짜 좋은 건데 왜 아무도 모르지?" 하는 발견의 기쁨을 전달해라.
-- 유튜버가 "이거 콘텐츠로 만들면 구독자들한테 진짜 도움 되겠다"고 느끼게 해라.
-- 절대 과장하지 마라. 팩트만으로도 충분히 매력적이다.
-
-【필수 포함 요소】
-- 영상의 구체적인 내용(자막 기반)을 언급하며 공감대 형성
-- Bes2의 3가지 철학 중 최소 2가지 자연스럽게 녹여내기
-- 앱 구동 영상 URL: https://bit.ly/sample_video (반드시 포함)
-- "협찬/광고가 아닌, 진심으로 구독자분들께 도움 될 것 같아 연락드린다"는 뉘앙스
-
-【피해야 할 것】
-- "알아서 다 지워줍니다" (X) → "정리를 완벽하게 도와주고 결정권은 드립니다" (O)
-- 직접적인 홍보/스팸 문구
-- 기능 나열식 설명
-
-한국어로 작성할 것."""
-
-    BES2_APP_VIDEO_URL = "https://bit.ly/sample_video"
+    """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성"""
     
     def __init__(self):
         genai.configure(api_key=config.GEMINI_API_KEY)
-        # 실제 사용 가능한 모델명 (모델 목록 조회 결과 기반)
-        self.model_name = "models/gemini-2.5-flash"
-        self.model = genai.GenerativeModel(self.model_name)
+        # 최신 모델 사용 (Gemini 1.5 Flash - 빠르고 저렴함)
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
-    def _generate_safe(self, prompt: str) -> str:
-        """안전하게 콘텐츠 생성 (모델 폴백 로직 포함)"""
-        full_prompt = f"{self.SYSTEM_PROMPT}\n\n---\n[작업 요청]\n{prompt}"
+    def analyze_video(self, video_data: dict, transcript: str) -> dict:
+        """영상 내용 분석 및 트렌드 파악"""
+        prompt = f'''
+        다음은 유튜브 영상의 정보와 자막입니다.
         
-        # Flash 모델만 사용 (비용 절감)
-        models_to_try = [
-            "models/gemini-2.5-flash",
-            "models/gemini-2.0-flash",
-            "models/gemini-2.0-flash-exp"
-        ]
+        [제목]: {video_data.get('title')}
+        [채널]: {video_data.get('channel_name')}
+        [자막 내용]:
+        {transcript[:10000]} (중략...)
         
-        last_error = None
-        for model_name in models_to_try:
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(full_prompt)
-                print(f"✅ Success with {model_name}")
-                return response.text
-            except Exception as e:
-                last_error = e
-                print(f"⚠️ {model_name} failed: {str(e)[:80]}")
-                continue
+        이 영상을 분석해서 다음 항목을 JSON 형식으로 출력해줘:
+        1. summary: 영상 내용 3줄 요약
+        2. pain_points: 시청자가 겪고 있는 문제점(Pain Point) 3가지는?
+        3. target_audience: 이 영상의 핵심 타겟 시청자층
+        4. relevance_score: 이 영상과 '사진 정리/백업 솔루션'의 관련 점수 (0~100점)
+        '''
         
-        # 모든 모델 실패
-        return f"[AI 에러] 모든 Gemini 모델 실패.\n마지막 에러: {last_error}\n\nAPI 키 할당량을 확인하세요: https://aistudio.google.com/app/apikey"
-    
-    def generate_email(
-        self,
-        channel_name: str,
-        video_title: str,
-        video_content: str,
-        subscriber_count: int = 0,
-        tone: str = "friendly"
-    ) -> str:
-        """
-        맞춤형 제안 이메일 생성
+        try:
+            response = self.model.generate_content(prompt)
+            return self._parse_json_response(response.text)
+        except Exception as e:
+            print(f"AI Analysis Error: {e}")
+            return {"summary": "분석 실패", "relevance_score": 0}
+
+    def generate_email_draft(self, video_data: dict, analysis: dict) -> str:
+        """콜드 메일 초안 작성"""
+        prompt = f'''
+        당신은 "구글 포토 용량 문제를 해결해주는 AI 사진 정리 앱(Bes2Gallery)"의 마케터입니다.
+        유튜버 '{video_data.get('channel_name')}'님에게 제휴 제안 메일을 써주세요.
         
-        Args:
-            channel_name: 유튜버 채널명
-            video_title: 영상 제목
-            video_content: 영상 자막 또는 설명
-            subscriber_count: 구독자 수
-            tone: 톤앤매너 (friendly, professional, casual)
-            
-        Returns:
-            생성된 이메일 본문
-        """
-        # 콘텐츠가 너무 길면 앞부분만 사용
-        content_preview = video_content[:15000] if video_content else "내용 없음"
-        # 1.5 Flash는 컨텍스트가 길므로 3000자 -> 15000자로 대폭 늘려서 더 정확하게 분석
+        [영상 정보]
+        - 제목: {video_data.get('title')}
+        - 분석: {analysis.get('summary')}
+        - Pain Point: {analysis.get('pain_points')}
         
-        prompt = f"""다음 유튜버에게 Bes2 앱을 소개하는 진심 어린 제안 이메일을 작성해줘.
-
-[타겟 유튜버 정보]
-- 채널명: {channel_name}
-- 구독자 수: {subscriber_count:,}명
-- 최근 영상 제목: {video_title}
-
-[영상 내용 (자막/설명) - 이 내용을 구체적으로 언급해서 공감대 형성]
-{content_preview}
-
-[이메일 작성 가이드]
-
-1. **도입부**: 영상 내용 중 구체적인 부분을 언급하며 "저도 같은 고민을 했었다"는 공감으로 시작
-
-2. **본론 - 아래 3가지 철학 중 2가지 이상을 자연스럽게 녹여내기**:
-   - Underdog 정신: "유료 앱들과 클라우드 기업들이 돈을 요구할 때, 이 앱은 완전 무료예요"
-   - Privacy First: "서버 전송이 아예 없어서 비행기 모드에서도 작동해요. 사진이 내 폰 밖으로 안 나가요"
-   - Smart Backdoor: "구글포토 용량 결제 전에, 쓰레기 사진부터 정리하면 15GB로도 충분해요"
-
-3. **제안**: "협찬/광고 제안이 아니라, 구독자분들께 진짜 도움 될 것 같아서 연락드렸어요"라는 뉘앙스
-
-4. **마무리**: 앱 구동 영상 URL({self.BES2_APP_VIDEO_URL}) 포함, 부담 없이 확인해보시라는 톤
-
-[톤앤매너]: {tone}
-- 광고/스팸 느낌 절대 금지
-- "이거 진짜 좋은 건데 왜 아무도 모르지?"하는 발견의 기쁨을 전달
-- 과장 수식어(최고의, 혁신적인, 놀라운) 사용 금지
-
-[형식]
-- 제목: (매력적이지만 스팸 같지 않게)
-- 본문: 400~600자"""
-
-        return self._generate_safe(prompt)
-    
-    def generate_comment(
-        self,
-        channel_name: str,
-        video_title: str,
-        video_content: str,
-        style: str = "helpful"
-    ) -> str:
-        """
-        영상 댓글 초안 생성
+        [메일 작성 가이드]
+        1. 제목은 클릭률이 높게, 영상 내용을 언급하며 자연스럽게.
+        2. 서론에서 해당 영상을 잘 봤다는 구체적인 칭찬으로 시작 (진정성).
+        3. 본론에서 시청자들이 겪는 '사진 용량 부족' 문제를 짚어주고, 우리 앱이 해결책임을 제시.
+        4. 제안: 유료 광고가 아니라 가볍게 소개해주시면 구독자 이벤트를 지원하겠다는 톤으로.
+        5. 정중하고 깔끔한 한국어 비즈니스 메일 형식.
+        '''
         
-        Args:
-            video_title: 영상 제목
-            video_content: 영상 자막 또는 설명
-            style: 댓글 스타일 (helpful, enthusiastic, informative)
-            
-        Returns:
-            생성된 댓글 텍스트
-        """
-        content_preview = video_content[:10000] if video_content else "내용 없음"
-        
-        prompt = f"""다음 유튜브 영상에 달 댓글을 작성해줘. 광고가 아니라 '진짜 도움 되는 정보 공유'처럼 보여야 해.
-
-[영상 정보]
-- 제목: {video_title}
-- 내용: {content_preview}
-
-[댓글 작성 가이드]
-
-1. **공감으로 시작**: 영상 내용 중 구체적인 부분에 공감 (예: "말씀하신 구글포토 용량 문제 진짜 공감돼요 ㅠㅠ")
-
-2. **자연스러운 전환**: "저도 똑같은 고민하다가 우연히 발견한 게 있는데요" 형태로 도입
-
-3. **핵심 가치 1~2개만 언급** (택1~2):
-   - "완전 무료인데 광고도 없어요" (Underdog)
-   - "서버로 사진 안 보내서 찝찝함이 없어요" (Privacy)
-   - "이걸로 정리하고 구글포토 백업하니까 15GB로 충분하더라고요" (Smart Backdoor)
-
-4. **링크 자연스럽게**: "영상으로 보시면 바로 이해되실 거예요 → {self.BES2_APP_VIDEO_URL}"
-
-[스타일]: {style}
-
-[주의사항]
-- 절대 광고/홍보처럼 보이면 안 됨
-- "이 앱 짱이에요!" 같은 과장 금지
-- 실제 사용자가 좋은 거 발견해서 공유하는 느낌으로
-- 100~150자로 짧고 자연스럽게
-- 이모지는 1~2개만 자연스럽게"""
-
-        return self._generate_safe(prompt)
-    
-    def summarize_video(self, video_content: str) -> str:
-        """
-        영상 내용 요약
-        
-        Args:
-            video_content: 영상 자막 또는 설명
-            
-        Returns:
-            요약된 내용
-        """
-        if not video_content or len(video_content) < 100:
-            return "내용이 부족하여 요약할 수 없습니다."
-        
-        content_preview = video_content[:5000]
-        
-        prompt = f"""다음 유튜브 영상 자막/설명을 3~5문장으로 요약해줘.
-핵심 주제와 다루는 내용을 간결하게 정리해줘.
-
-[영상 내용]
-{content_preview}"""
-
         try:
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
-            print(f"Summary generation error: {e}")
-            return f"[오류] 요약 생성 실패: {e}"
-    
-    def analyze_relevance(self, video_content: str) -> dict:
-        """
-        Bes2 앱과의 관련성 분석
-        
-        Args:
-            video_content: 영상 자막 또는 설명
-            
-        Returns:
-            {
-                "score": float (0~1),
-                "reason": str,
-                "keywords_found": list[str]
-            }
-        """
-        if not video_content:
-            return {"score": 0.0, "reason": "내용 없음", "keywords_found": []}
-        
-        content_preview = video_content[:3000]
-        
-        prompt = f"""다음 영상이 'Bes2' 사진 정리 앱 마케팅에 얼마나 적합한지 분석해줘.
+            return f"작성 실패: {e}"
 
-[Bes2 앱 관련 키워드]
-사진 정리, 갤러리 정리, 용량 부족, 저장공간, 사진 백업, 구글포토, 아이클라우드, 
-중복 사진, 스크린샷 정리, 핸드폰 용량, 클라우드 비용
-
-[영상 내용]
-{content_preview}
-
-[응답 형식 - 반드시 아래 JSON 형식으로만 응답]
-{{
-    "score": 0.0~1.0 사이의 관련성 점수,
-    "reason": "판단 이유 한 문장",
-    "keywords_found": ["발견된", "관련", "키워드"]
-}}"""
-
+    def _parse_json_response(self, text: str) -> dict:
+        """Gemini 응답에서 JSON 추출 (간단 파싱)"""
+        import json
+        text = text.replace("```json", "").replace("```", "").strip()
         try:
-            response = self.model.generate_content(prompt)
-            
-            # JSON 파싱 시도
-            import json
-            import re
-            
-            # JSON 블록 추출
-            text = response.text
-            json_match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
-            
-            if json_match:
-                result = json.loads(json_match.group())
-                return {
-                    "score": float(result.get("score", 0)),
-                    "reason": result.get("reason", ""),
-                    "keywords_found": result.get("keywords_found", [])
-                }
-        except Exception as e:
-            print(f"Relevance analysis error: {e}")
-        
-        return {"score": 0.5, "reason": "분석 실패", "keywords_found": []}
-    
-    def generate_drafts_for_video(
-        self,
-        video_id: str,
-        save_to_db: bool = True
-    ) -> dict:
-        """
-        특정 영상에 대한 이메일 + 댓글 초안 생성
-        
-        Args:
-            video_id: DB의 video UUID
-            save_to_db: DB에 저장 여부
-            
-        Returns:
-            {
-                "email": str,
-                "comment": str,
-                "summary": str
-            }
-        """
-        # 영상 정보 가져오기
-        video = db.get_video_with_lead(video_id)
-        if not video:
-            return {"error": "Video not found"}
-        
-        lead = video.get("leads", {})
-        
-        # 콘텐츠 준비
-        video_content = video.get("transcript_text") or ""
-        channel_name = lead.get("channel_name", "유튜버")
-        subscriber_count = lead.get("subscriber_count", 0)
-        
-        # 요약 생성
-        summary = self.summarize_video(video_content)
-        
-        # 이메일 생성
-        email = self.generate_email(
-            channel_name=channel_name,
-            video_title=video["title"],
-            video_content=video_content,
-            subscriber_count=subscriber_count
-        )
-        
-        # 댓글 생성
-        comment = self.generate_comment(
-            video_title=video["title"],
-            video_content=video_content
-        )
-        
-        # DB 저장
-        if save_to_db:
-            lead_id = lead.get("id")
-            
-            # 요약 업데이트
-            db.update_video(video_id, summary=summary)
-            
-            # 이메일 초안 저장
-            db.create_draft(
-                draft_type="email",
-                content=email,
-                video_id=video_id,
-                lead_id=lead_id,
-                tone="friendly"
-            )
-            
-            # 댓글 초안 저장
-            db.create_draft(
-                draft_type="comment",
-                content=comment,
-                video_id=video_id,
-                lead_id=lead_id,
-                tone="helpful"
-            )
-        
-        return {
-            "email": email,
-            "comment": comment,
-            "summary": summary
-        }
-
-
-# =============================================
-# 편의 함수 (싱글톤 인스턴스)
-# =============================================
-
-# 싱글톤 인스턴스
-hunter = YouTubeHunter()
-copywriter = AICopywriter()
-
-
-def run_full_pipeline(
-    keywords: Optional[list[str]] = None,
-    max_videos: int = 5,
-    generate_drafts: bool = True
-) -> dict:
-    """
-    전체 파이프라인 실행
-    1. YouTube 검색 및 영상 수집
-    2. 관련성 분석
-    3. 이메일/댓글 초안 생성
-    
-    Args:
-        keywords: 검색 키워드 (None이면 기본값 사용)
-        max_videos: 키워드당 최대 영상 수
-        generate_drafts: 초안 생성 여부
-        
-    Returns:
-        실행 결과 요약
-    """
-    print("🚀 Starting Bes2 Marketer Pipeline...\n")
-    
-    # 1. 영상 수집
-    print("=" * 50)
-    print("📹 Phase 1: YouTube Hunting")
-    print("=" * 50)
-    videos = hunter.hunt(keywords, max_results_per_keyword=max_videos)
-    
-    if not videos:
-        return {"status": "no_videos", "message": "수집된 영상이 없습니다."}
-    
-    # 2. 관련성 분석 및 초안 생성
-    if generate_drafts:
-        print("\n" + "=" * 50)
-        print("✍️ Phase 2: AI Copywriting")
-        print("=" * 50)
-        
-        # DB에서 최근 저장된 영상 가져오기
-        recent_videos = db.get_all_videos(limit=len(videos))
-        
-        for video in recent_videos:
-            print(f"\n📝 Processing: {video['title'][:40]}...")
-            
-            # 관련성 분석
-            relevance = copywriter.analyze_relevance(video.get("transcript_text", ""))
-            db.update_video(video["id"], relevance_score=relevance["score"])
-            print(f"   관련성: {relevance['score']:.1%} - {relevance['reason']}")
-            
-            # 관련성 높은 영상만 초안 생성
-            if relevance["score"] >= 0.5:
-                drafts = copywriter.generate_drafts_for_video(video["id"])
-                print(f"   ✅ 이메일/댓글 초안 생성 완료")
-            else:
-                print(f"   ⏭️ 관련성 낮음 - 초안 생성 스킵")
-    
-    # 결과 요약
-    stats = {
-        "videos_collected": len(videos),
-        "leads": db.get_lead_stats(),
-        "drafts": db.get_draft_stats()
-    }
-    
-    print("\n" + "=" * 50)
-    print("📊 Pipeline Complete!")
-    print("=" * 50)
-    print(f"수집된 영상: {stats['videos_collected']}개")
-    print(f"총 리드: {stats['leads']['total']}개")
-    print(f"생성된 초안: {stats['drafts']['total']}개")
-    
-    return stats
-
-
-# =============================================
-# 테스트 코드
-# =============================================
-
-if __name__ == "__main__":
-    print("🧪 Testing Bes2 Marketer Logic...\n")
-    
-    # 설정 검증
-    is_valid, missing = config.validate()
-    if not is_valid:
-        print(f"❌ Missing environment variables: {missing}")
-        print("Please check your .env file")
-        exit(1)
-    
-    print("✅ Configuration validated\n")
-    
-    # 간단한 테스트
-    print("Testing YouTube search...")
-    test_videos = hunter.search_videos("사진 정리", max_results=2)
-    
-    if test_videos:
-        print(f"Found {len(test_videos)} videos")
-        for v in test_videos:
-            print(f"  - {v['title'][:50]}...")
-    else:
-        print("No videos found (check your API key)")
-
+            return json.loads(text)
+        except:
+            return {"summary": text[:200], "relevance_score": 50}

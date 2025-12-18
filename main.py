@@ -275,6 +275,8 @@ with st.sidebar:
             step=50,
             help="한 번 서칭할 때 최대 몇 개의 영상을 가져올지 설정합니다."
         )
+        # [NEW] 이메일 필수 옵션
+        require_email = st.checkbox("이메일 없는 영상은 수집 안 함", value=False, help="체크하면 이메일이 발견된 채널의 영상만 수집합니다. (수집량이 줄어들 수 있음)")
     
     # [NEW] 최소 조회수 설정 (품질 필터)
     min_view_count = st.select_slider(
@@ -313,7 +315,8 @@ with st.sidebar:
                             keyword=keyword,
                             max_results=max_results,
                             published_after_days=published_after,
-                            min_view_count=min_view_count
+                            min_view_count=min_view_count,
+                            require_email=require_email
                         )
                         
                         if total_count > 0:
@@ -442,8 +445,13 @@ with tab1:
             if isinstance(view_count, str):
                 view_count = int(view_count.replace(',', '')) if view_count.replace(',', '').isdigit() else 0
             
+            # 이메일 유무 확인 (상태 아이콘)
+            email = v.get("channel_info", {}).get("email")
+            status_icon = "📧" if email else "💬"
+            
             video_data.append({
                 "선택": False,
+                "상태": status_icon, # [NEW]
                 "썸네일": v["thumbnail_url"],
                 "제목": v["title"],
                 "채널명": v["channel_name"],
@@ -463,6 +471,7 @@ with tab1:
             df_videos,
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False),
+                "상태": st.column_config.TextColumn("연락", help="📧: 이메일 있음 / 💬: 댓글 필요", width="small"),
                 "썸네일": st.column_config.ImageColumn("썸네일", width="small"),
                 "제목": st.column_config.TextColumn("제목", width="large"),
                 "조회수": st.column_config.TextColumn("조회수", width="small"),
