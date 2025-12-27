@@ -369,3 +369,9 @@ class AICopywriter:
             return json.loads(text)
         except:
             return {"summary": text[:200], "relevance_score": 50}
+
+# =============================================
+# 인스턴스 생성 (외부 사용용)
+# =============================================
+hunter = YouTubeHunter()
+copywriter = AICopywriter()
