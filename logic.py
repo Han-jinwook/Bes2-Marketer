@@ -28,10 +28,14 @@ class YouTubeHunter:
     """YouTube 영상 검색 및 자막 추출 클래스"""
     
     def __init__(self):
-        self.youtube = build(
-            "youtube", "v3",
-            developerKey=config.YOUTUBE_API_KEY
-        )
+        try:
+            self.youtube = build(
+                "youtube", "v3",
+                developerKey=config.YOUTUBE_API_KEY
+            )
+        except Exception as e:
+            print(f"Warning: Failed to initialize YouTube API: {e}")
+            self.youtube = None
     
     def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0, require_email: bool = False) -> tuple[list[dict], int]:
         """
@@ -319,9 +323,13 @@ class AICopywriter:
     """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성"""
     
     def __init__(self):
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        # 12/27 Update: Gemini 1.5 Flash (가성비 + 속도)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            # 12/27 Update: Gemini 1.5 Flash (가성비 + 속도)
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+        except Exception as e:
+            print(f"Warning: Failed to initialize Gemini API: {e}")
+            self.model = None
 
     def analyze_video(self, video_data: dict, transcript: str) -> dict:
         """영상 내용 분석 (Legacy support)"""
