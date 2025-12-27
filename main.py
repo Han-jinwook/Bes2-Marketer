@@ -417,6 +417,7 @@ with tab1:
                     "channel_name": lead["channel_name"] if lead else "Unknown",
                     "channel_id": lead["channel_id"] if lead else "",
                     "thumbnail_url": v.get("thumbnail_url", ""),
+                    "published_at": v.get("upload_date", ""), # [FIX] UI 호환용 이름표 추가
                     "video_url": v.get("video_url", f"https://youtube.com/watch?v={v['video_id']}"),
                     "view_count": v.get("view_count", 0),
                     "transcript_text": v.get("transcript_text", ""),
