@@ -450,16 +450,19 @@ with tab1:
             email = v.get("channel_info", {}).get("email")
             status_icon = "📧" if email else "💬"
             
+            publisher = v.get("published_at", "")
+            pub_date = publisher[:10] if publisher else ""
+
             video_data.append({
                 "선택": False,
                 "상태": status_icon, # [NEW]
-                "썸네일": v["thumbnail_url"],
-                "제목": v["title"],
-                "채널명": v["channel_name"],
-                "게시일": v["published_at"][:10],
+                "썸네일": v.get("thumbnail_url", ""),
+                "제목": v.get("title", "No Title"),
+                "채널명": v.get("channel_name", "Unknown"),
+                "게시일": pub_date,
                 "조회수": f"{view_count:,}",
-                "링크": v["video_url"],
-                "video_id": v["video_id"],
+                "링크": v.get("video_url", ""),
+                "video_id": v.get("video_id", ""),
                 "raw_data": v # 전체 데이터 보존
             })
             
