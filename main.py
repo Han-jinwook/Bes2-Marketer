@@ -490,6 +490,46 @@ with tab1:
         selected_rows = edited_videos[edited_videos["선택"]]
         
         if not selected_rows.empty:
+            
+            # [NEW] 이메일 수동 업데이트 섹션
+            st.markdown("### 📝 채널 정보 수동 관리")
+            target_row = selected_rows.iloc[0] # 첫 번째 선택 항목 기준
+            target_raw = target_row["raw_data"]
+            current_email = target_raw.get("channel_info", {}).get("email")
+            
+            # 이메일이 없는 경우에만(혹은 수정하고 싶을 때) 표시
+            col_u1, col_u2 = st.columns([3, 1])
+            with col_u1:
+                new_email = st.text_input(
+                    f"'{target_row['채널명']}' 채널의 이메일 입력", 
+                    value=current_email if current_email else "", 
+                    placeholder="예: contact@channel.com",
+                    key=f"email_input_{target_row['video_id']}"
+                )
+            with col_u2:
+                # 라인 맞춤
+                st.write("") 
+                st.write("")
+                if st.button("💾 이메일 저장", use_container_width=True):
+                    if new_email and new_email != current_email:
+                        # DB 업데이트
+                        channel_id = target_raw["channel_id"]
+                        lead = db.get_lead_by_channel_id(channel_id)
+                        if lead:
+                            db.update_lead(lead["id"], email=new_email)
+                            st.success(f"✅ '{target_row['채널명']}' 이메일 업데이트 완료!")
+                            
+                            # 세션 상태도 즉시 업데이트 (UI 반영을 위해)
+                            for v in st.session_state.search_results:
+                                if v["channel_id"] == channel_id:
+                                    if "channel_info" not in v: v["channel_info"] = {}
+                                    v["channel_info"]["email"] = new_email
+                            st.rerun() # 새로고침하여 아이콘 변경
+                        else:
+                            st.error("❌ DB에서 채널 정보를 찾을 수 없습니다.")
+                    else:
+                        st.info("변경할 이메일을 입력해주세요.")
+
             st.markdown("---")
             col_action, col_msg = st.columns([1, 2])
             
