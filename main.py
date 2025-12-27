@@ -501,7 +501,12 @@ with tab1:
             st.markdown("### 📝 채널 정보 수동 관리")
             target_row = selected_rows.iloc[0] # 첫 번째 선택 항목 기준
             target_raw = target_row["raw_data"]
-            current_email = target_raw.get("channel_info", {}).get("email")
+            
+            # channel_info가 None일 수 있는 경우 방어
+            ch_info = target_raw.get("channel_info")
+            if not ch_info: ch_info = {}
+            
+            current_email = ch_info.get("email")
             
             # 이메일이 없는 경우에만(혹은 수정하고 싶을 때) 표시
             col_u1, col_u2 = st.columns([3, 1])
