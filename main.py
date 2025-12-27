@@ -5,16 +5,21 @@ AI 기반 유튜브 마케팅 자동화 대시보드
 
 # Force Update: Fix KeyError Cache
 import streamlit as st
+import pandas as pd
+import time
 
-# =============================================
-# 페이지 설정 (가장 먼저 실행되어야 함)
-# =============================================
+
+# [Critical Fix] 캐시 강제 삭제 (업데이트 미반영 해결용)
+# 주의: set_page_config가 항상 먼저여야 함
 st.set_page_config(
-    page_title="Bes2 Marketer",
+    page_title="Bes2 Marketer Pro",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+st.cache_data.clear()
+st.cache_resource.clear()
 
 from datetime import datetime
 import time
@@ -199,8 +204,8 @@ if "comment_versions" not in st.session_state:
 
 st.markdown("""
 <div class="main-header">
-    <h1>🚀 Bes2 Marketer</h1>
-    <p>AI 기반 유튜브 마케팅 자동화 대시보드</p>
+    <h1>🚀 Bes2 Marketer Pro <span style='font-size:1.2rem; color:#FFD700; font-weight:bold;'>(v2.2 Running)</span></h1>
+    <p style='color: white;'>AI 기반 유튜브 마케팅 자동화 대시보드 - <b>Privacy First & Smart Backup</b></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -447,38 +452,38 @@ with tab1:
             if isinstance(view_count, str):
                 view_count = int(view_count.replace(',', '')) if view_count.replace(',', '').isdigit() else 0
             
-            # 이메일 유무 확인 (상태 아이콘)
-            email = v.get("channel_info", {}).get("email")
-            status_icon = "📧" if email else "💬"
+            # 이메일 추출 (직접 수정 가능하도록 텍스트로 표시)
+            ch_info = v.get("channel_info") or {}
+            email_addr = ch_info.get("email") or ""
             
             publisher = v.get("published_at", "")
             pub_date = publisher[:10] if publisher else ""
 
             video_data.append({
                 "선택": False,
-                "상태": status_icon, # [NEW]
                 "썸네일": v.get("thumbnail_url", ""),
                 "제목": v.get("title", "No Title"),
+                "이메일": email_addr, # [NEW] 직접 편집 가능
                 "채널명": v.get("channel_name", "Unknown"),
                 "게시일": pub_date,
                 "조회수": f"{view_count:,}",
                 "링크": v.get("video_url", ""),
                 "video_id": v.get("video_id", ""),
-                "raw_data": v # 전체 데이터 보존
+                "raw_data": v # 전체 데이터 보존 (참조용)
             })
             
         df_videos = pd.DataFrame(video_data)
         
         # 2. 선택 가능한 테이블 표시
         st.caption(f"총 {len(results)}개의 영상을 찾았습니다.")
-        st.info("💡 **Tip**: 이메일이 없는(💬) 영상은 **왼쪽 '선택' 체크박스**를 누르면, 아래에 [이메일 입력창]이 나타납니다.")
+        st.info("💡 **Tip**: '이메일' 칸을 클릭하여 바로 수정할 수 있습니다. 자동으로 저장됩니다.")
         
         edited_videos = st.data_editor(
             df_videos,
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False),
-                "상태": st.column_config.TextColumn("연락", help="📧: 이메일 있음 / 💬: 댓글 필요", width="small"),
-                "썸네일": st.column_config.ImageColumn("썸네일", width="small"),
+                "썸네일": st.column_config.ImageColumn("썸네일", width="medium"), # [UX] 크기 키움
+                "이메일": st.column_config.TextColumn("이메일", width="medium", help="클릭해서 이메일을 입력하세요."),
                 "제목": st.column_config.TextColumn("제목", width="large"),
                 "조회수": st.column_config.TextColumn("조회수", width="small"),
                 "게시일": st.column_config.TextColumn("게시일", width="small"),
@@ -488,60 +493,46 @@ with tab1:
             },
             hide_index=True,
             use_container_width=True,
-            height=500,
-            key="video_selector"
+            height=600,
+            key="video_editor"
         )
         
-        # 3. 일괄 분석 버튼
+        # 3. 데이터 변경 감지 및 자동 저장 (Auto-Save)
+        if st.session_state.video_editor.get("edited_rows"):
+            changes = st.session_state.video_editor["edited_rows"]
+            
+            # 변경된 행 처리
+            for idx_str, updated_cols in changes.items():
+                if "이메일" in updated_cols:
+                    new_email = updated_cols["이메일"]
+                    try:
+                        idx = int(idx_str)
+                        # 원본 데이터 매칭
+                        target_v = video_data[idx]["raw_data"]
+                        channel_id = target_v["channel_id"]
+                        
+                        # DB 업데이트
+                        lead = db.get_lead_by_channel_id(channel_id)
+                        if lead:
+                            db.update_lead(lead["id"], email=new_email)
+                            
+                            # 세션 상태(메모리)도 동기화하여 UI 즉시 반영
+                            # (주의: search_results 내의 모든 해당 채널 영상 업데이트)
+                            for vid in st.session_state.search_results:
+                                if vid["channel_id"] == channel_id:
+                                    if "channel_info" not in vid: vid["channel_info"] = {}
+                                    vid["channel_info"]["email"] = new_email
+                            
+                            st.toast(f"✅ 저장됨: {target_v['channel_name']}", icon="💾")
+                            
+                    except Exception as e:
+                        print(f"Update error: {e}")
+                        
+        # 4. 일괄 분석 버튼
         selected_rows = edited_videos[edited_videos["선택"]]
         
         if not selected_rows.empty:
             
-            # [NEW] 이메일 수동 업데이트 섹션
-            st.markdown("### 📝 채널 정보 수동 관리")
-            target_row = selected_rows.iloc[0] # 첫 번째 선택 항목 기준
-            target_raw = target_row["raw_data"]
-            
-            # channel_info가 None일 수 있는 경우 방어
-            ch_info = target_raw.get("channel_info")
-            if not ch_info: ch_info = {}
-            
-            current_email = ch_info.get("email")
-            
-            # 이메일이 없는 경우에만(혹은 수정하고 싶을 때) 표시
-            col_u1, col_u2 = st.columns([3, 1])
-            with col_u1:
-                new_email = st.text_input(
-                    f"'{target_row['채널명']}' 채널의 이메일 입력", 
-                    value=current_email if current_email else "", 
-                    placeholder="예: contact@channel.com",
-                    key=f"email_input_{target_row['video_id']}"
-                )
-            with col_u2:
-                # 라인 맞춤
-                st.write("") 
-                st.write("")
-                if st.button("💾 이메일 저장", use_container_width=True):
-                    if new_email and new_email != current_email:
-                        # DB 업데이트
-                        channel_id = target_raw["channel_id"]
-                        lead = db.get_lead_by_channel_id(channel_id)
-                        if lead:
-                            db.update_lead(lead["id"], email=new_email)
-                            st.success(f"✅ '{target_row['채널명']}' 이메일 업데이트 완료!")
-                            
-                            # 세션 상태도 즉시 업데이트 (UI 반영을 위해)
-                            for v in st.session_state.search_results:
-                                if v["channel_id"] == channel_id:
-                                    if "channel_info" not in v: v["channel_info"] = {}
-                                    v["channel_info"]["email"] = new_email
-                            st.rerun() # 새로고침하여 아이콘 변경
-                        else:
-                            st.error("❌ DB에서 채널 정보를 찾을 수 없습니다.")
-                    else:
-                        st.info("변경할 이메일을 입력해주세요.")
-
-            st.markdown("---")
             col_action, col_msg = st.columns([1, 2])
             
             with col_action:
@@ -627,7 +618,7 @@ with tab1:
                                     channel_name=video["channel_name"],
                                     video_title=video["title"],
                                     video_content=content,
-                                    subscriber_count=video.get("channel_info", {}).get("subscriber_count", 0)
+                                    subscriber_count=(video.get("channel_info") or {}).get("subscriber_count", 0)
                                 )
                                 comment = copywriter.generate_comment(
                                     channel_name=video["channel_name"],
@@ -645,8 +636,8 @@ with tab1:
                                     lead = db.create_lead(
                                         channel_name=video["channel_name"],
                                         channel_id=video["channel_id"],
-                                        subscriber_count=video.get("channel_info", {}).get("subscriber_count", 0),
-                                        email=video.get("channel_info", {}).get("email"),
+                                        subscriber_count=(video.get("channel_info") or {}).get("subscriber_count", 0),
+                                        email=(video.get("channel_info") or {}).get("email"),
                                         keywords=[video.get("search_keyword", "")],
                                     )
                                     lead_id = lead["id"]
