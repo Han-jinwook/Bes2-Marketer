@@ -148,11 +148,22 @@ class YouTubeHunter:
                         if min_view_count > 0 and view_count < min_view_count:
                             continue
                             
-                        # 이메일 추출 (영상 설명이 1순위 -> 채널 설명이 2순위)
+                        # 이메일 추출 (3단계 전략)
                         chan_info = channel_map.get(cid, {})
+                        
+                        # 1. 영상 설명
                         email = self._extract_email_from_text(v["description"])
+                        
+                        # 2. 채널 설명
                         if not email:
                             email = self._extract_email_from_text(chan_info.get("description", ""))
+                        
+                        # [NEW] 3. DB 조회 (과거 수집 기록)
+                        if not email:
+                            existing_lead = db.get_lead_by_channel_id(cid)
+                            if existing_lead and existing_lead.get("email"):
+                                email = existing_lead["email"]
+
                             
                         # 이메일 필수 필터링
                         if require_email and not email:
