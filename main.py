@@ -465,7 +465,8 @@ with tab1:
         df_videos = pd.DataFrame(video_data)
         
         # 2. 선택 가능한 테이블 표시
-        st.caption(f"총 {len(results)}개의 영상을 찾았습니다. 분석할 영상을 선택하세요.")
+        st.caption(f"총 {len(results)}개의 영상을 찾았습니다.")
+        st.info("💡 **Tip**: 이메일이 없는(💬) 영상은 **왼쪽 '선택' 체크박스**를 누르면, 아래에 [이메일 입력창]이 나타납니다.")
         
         edited_videos = st.data_editor(
             df_videos,
