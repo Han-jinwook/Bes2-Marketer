@@ -431,11 +431,11 @@ with tab1:
         except Exception as e:
             st.info("DB에 저장된 영상이 없습니다.")
     
-    # 검색 결과가 있을 경우 (DataFrame View)
-    st.markdown("### 📹 영상 검색 결과")
+    # 검색 결과 또는 DB 데이터가 있을 경우 (DataFrame View)
+    st.markdown("### 📹 영상 목록")
     
-    if "search_results" in st.session_state and st.session_state.search_results:
-        results = st.session_state.search_results
+    if videos_to_show:
+        results = videos_to_show
         
         # 1. DataFrame 변환 for 일괄 선택
         video_data = []
