@@ -162,11 +162,19 @@ class YouTubeHunter:
                         if not email:
                             email = self._extract_email_from_text(chan_info.get("description", ""))
                         
+
                         # [NEW] 3. DB 조회 (과거 수집 기록)
                         if not email:
                             existing_lead = db.get_lead_by_channel_id(cid)
                             if existing_lead and existing_lead.get("email"):
                                 email = existing_lead["email"]
+
+                        # [NEW] 4. Deep Scan (최신 영상 5개 뒤지기)
+                        # 이메일이 여전히 없고, require_email 옵션이 켜져 있거나, 사용자가 수동으로 원할 때
+                        # 여기서는 일단 항상 시도 (Found a hidden gem strategy)
+                        if not email:
+                            print(f"Deep scanning channel {cid} for email...")
+                            email = self._deep_scan_email(cid)
 
                             
                         # 이메일 필수 필터링
@@ -232,7 +240,41 @@ class YouTubeHunter:
         except Exception as e:
             print(f"Error getting video details: {e}")
         
+
         return {}
+    
+    def _deep_scan_email(self, channel_id: str) -> Optional[str]:
+        """[Deep Scan] 채널의 최신 영상 5개를 조회하여 설명글에서 이메일 탐색"""
+        try:
+            # 1. 채널의 '업로드' 재생목록 ID 가져오기
+            ch_resp = self.youtube.channels().list(
+                part="contentDetails",
+                id=channel_id
+            ).execute()
+            
+            if not ch_resp["items"]: return None
+            
+            uploads_playlist_id = ch_resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+            
+            # 2. 최신 영상 5개 가져오기
+            pl_resp = self.youtube.playlistItems().list(
+                part="snippet",
+                playlistId=uploads_playlist_id,
+                maxResults=5
+            ).execute()
+            
+            # 3. 설명글 스캔
+            for item in pl_resp.get("items", []):
+                desc = item["snippet"].get("description", "")
+                found_email = self._extract_email_from_text(desc)
+                if found_email:
+                    print(f"   ✨ Deep Scan Success! Found email in video: {item['snippet']['title']}")
+                    return found_email
+                    
+        except Exception as e:
+            print(f"Deep scan failed for {channel_id}: {e}")
+        
+        return None
     
     def get_channel_info(self, channel_id: str) -> Optional[dict]:
         """채널 정보 가져오기"""
