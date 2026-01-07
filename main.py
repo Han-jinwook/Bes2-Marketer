@@ -447,10 +447,21 @@ with tab1:
             if isinstance(view_count, str):
                 view_count = int(view_count.replace(',', '')) if view_count.replace(',', '').isdigit() else 0
 
+
+        # [UX] 전체 선택/해제 토글 버튼 (작게)
+        if "select_all_toggle" not in st.session_state:
+            st.session_state.select_all_toggle = True # 기본값: 전체 선택
+            
+        col_toggle, _ = st.columns([1, 6])
+        btn_label = "⬜ 전체 해제" if st.session_state.select_all_toggle else "✅ 전체 선택"
+        if col_toggle.button(btn_label, key="btn_toggle_select", use_container_width=True):
+            st.session_state.select_all_toggle = not st.session_state.select_all_toggle
+            st.rerun()
+
         # 1. 시각화용 데이터프레임 변환
         video_data = []
         for v in results:
-            selected = True # [UX] 기본적으로 전체 선택 상태
+            selected = st.session_state.select_all_toggle # 토글 상태 반영
             
             # 이메일 표시 (DB 우선 -> 수집된 것 -> 빈 값)
             email_addr = v.get("channel_info", {}).get("email", "")
