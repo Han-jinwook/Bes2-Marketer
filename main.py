@@ -467,6 +467,12 @@ with tab1:
                 "raw_data": v # 전체 데이터 보존 (참조용)
             })
             
+        # [NEW] 전체 선택 / 해제 버튼
+        col_sel_all, _ = st.columns([1, 5])
+        if col_sel_all.button("✅ 전체 선택"):
+             for item in video_data:
+                 item["선택"] = True
+
         df_videos = pd.DataFrame(video_data)
         
         # 2. 선택 가능한 테이블 표시
