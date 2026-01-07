@@ -467,11 +467,25 @@ with tab1:
                 "raw_data": v # 전체 데이터 보존 (참조용)
             })
             
-        # [NEW] 전체 선택 / 해제 버튼
-        col_sel_all, _ = st.columns([1, 5])
-        if col_sel_all.button("✅ 전체 선택"):
-             for item in video_data:
-                 item["선택"] = True
+
+        # [UX] 전체 선택/해제 토글
+        if "select_all_state" not in st.session_state:
+            st.session_state.select_all_state = False
+            
+        col_utils1, col_utils2 = st.columns([1, 5])
+        with col_utils1:
+            if st.checkbox("✅ 전체 선택", value=st.session_state.select_all_state, key="chk_select_all"):
+                st.session_state.select_all_state = True
+            else:
+                st.session_state.select_all_state = False
+        
+        # 데이터프레임 생성 시 전체 선택 상태 반영
+        for item in video_data:
+            if st.session_state.select_all_state:
+                item["선택"] = True
+
+        df_videos = pd.DataFrame(video_data)
+
 
         df_videos = pd.DataFrame(video_data)
         
@@ -529,24 +543,37 @@ with tab1:
                     except Exception as e:
                         print(f"Update error: {e}")
                         
-        # 4. 일괄 분석 버튼
+
+        # 4. 액션 버튼 (삭제 & 분석)
         selected_rows = edited_videos[edited_videos["선택"]]
         
-        if not selected_rows.empty:
-            
-            col_action, col_msg = st.columns([1, 2])
-            
-            with col_action:
-                if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True):
+        col_del, col_anal = st.columns([1, 4])
+        
+        with col_del:
+            if st.button("🗑️ 선택 삭제", type="secondary", use_container_width=True, disabled=selected_rows.empty):
+                # 선택된 video_id 목록 추출
+                ids_to_remove = set(selected_rows["video_id"].tolist())
+                
+                # 세션에서 제거 (검색 결과 필터링)
+                st.session_state.search_results = [
+                    v for v in st.session_state.search_results 
+                    if v["video_id"] not in ids_to_remove
+                ]
+                st.toast(f"🗑️ {len(ids_to_remove)}개 영상이 목록에서 제거되었습니다.")
+                time.sleep(1)
+                st.rerun()
+
+        with col_anal:
+            if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True, disabled=selected_rows.empty):
                     
-                    pass
+                pass
                     
-                    progress_bar = st.progress(0)
-                    status_area = st.empty()
-                    
-                    success_count = 0
-                    
-                    for idx, row in enumerate(selected_rows.itertuples()):
+                progress_bar = st.progress(0)
+                status_area = st.empty()
+                
+                success_count = 0
+                
+                for idx, row in enumerate(selected_rows.itertuples()):
                         vid = row.video_id
                         # 원본 데이터에서 조회 (DataFrame 데이터 무결성 보장)
                         video = next((v for v in results if v["video_id"] == vid), None)
