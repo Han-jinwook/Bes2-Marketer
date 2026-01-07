@@ -440,6 +440,32 @@ class Database:
         return response.data[0] if response.data else None
 
 
+
+    # =========================================
+    # APP SETTINGS (설정 관리) CRUD
+    # =========================================
+    
+    def get_app_setting(self, key: str, default: str = "") -> str:
+        """설정 값 가져오기"""
+        try:
+            response = self.client.table("app_settings").select("value").eq("key", key).execute()
+            if response.data:
+                return response.data[0]["value"]
+        except Exception as e:
+            print(f"Error fetching setting {key}: {e}")
+        return default
+    
+    def set_app_setting(self, key: str, value: str) -> bool:
+        """설정 값 저장하기 (Upsert)"""
+        try:
+            data = {"key": key, "value": value}
+            self.client.table("app_settings").upsert(data, on_conflict="key").execute()
+            return True
+        except Exception as e:
+            print(f"Error saving setting {key}: {e}")
+            return False
+
+
 # 싱글톤 인스턴스
 db = Database()
 

@@ -159,29 +159,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# =============================================
-# 키워드 저장 파일 경로
-# =============================================
-import json
-import os
 
-KEYWORDS_FILE = "saved_keywords.json"
+# =============================================
+# 키워드 저장 관리 (DB 연동)
+# =============================================
 
 def load_saved_keywords() -> str:
-    """저장된 키워드 불러오기"""
-    if os.path.exists(KEYWORDS_FILE):
-        try:
-            with open(KEYWORDS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("keywords", "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업")
-        except:
-            pass
-    return "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
+    """저장된 키워드 불러오기 (DB)"""
+    default_kw = "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
+    try:
+        from database import db
+        return db.get_app_setting("search_keywords", default_kw)
+    except:
+        return default_kw
 
 def save_keywords(keywords: str):
-    """키워드 저장하기"""
-    with open(KEYWORDS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"keywords": keywords}, f, ensure_ascii=False, indent=2)
+    """키워드 저장하기 (DB)"""
+    from database import db
+    db.set_app_setting("search_keywords", keywords)
 
 # =============================================
 # 세션 상태 초기화
@@ -204,7 +199,7 @@ if "comment_versions" not in st.session_state:
 
 st.markdown("""
 <div class="main-header">
-    <h1>🚀 Bes2 Marketer Pro <span style='font-size:1.2rem; color:#FFD700; font-weight:bold;'>(v2.2 Running)</span></h1>
+    <h1>🚀 Bes2 Marketer Pro <span style='font-size:1.2rem; color:#00FF00; font-weight:bold;'>(v2.3 Deep Search Active)</span></h1>
     <p style='color: white;'>AI 기반 유튜브 마케팅 자동화 대시보드 - <b>Privacy First & Smart Backup</b></p>
 </div>
 """, unsafe_allow_html=True)
@@ -230,7 +225,7 @@ with st.sidebar:
         if st.button("💾 키워드 저장", use_container_width=True):
             save_keywords(keywords_input)
             st.session_state.saved_keywords = keywords_input
-            st.success("✅ 저장됨!")
+            st.success("✅ DB에 영구 저장됨!")
     with col_save2:
         if st.button("🔄 초기화", use_container_width=True):
             default_kw = "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
