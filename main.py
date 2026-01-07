@@ -457,7 +457,6 @@ with tab1:
             
             video_data.append({
                 "선택": selected,
-                "썸네일": v["thumbnail_url"],
                 "제목": v.get("title", "No Title"),
                 "이메일": email_addr, # [NEW] 직접 편집 가능
                 "채널명": v.get("channel_name", "Unknown"),
@@ -469,9 +468,6 @@ with tab1:
             })
 
         df_videos = pd.DataFrame(video_data)
-
-
-        df_videos = pd.DataFrame(video_data)
         
         # 2. 선택 가능한 테이블 표시
         st.caption(f"총 {len(results)}개의 영상을 찾았습니다.")
@@ -480,10 +476,10 @@ with tab1:
         edited_videos = st.data_editor(
             df_videos,
             column_config={
-                "선택": st.column_config.CheckboxColumn("선택", default=False),
-                "썸네일": st.column_config.ImageColumn("썸네일", width="medium"), # [UX] 크기 키움
+                "선택": st.column_config.CheckboxColumn("선택", width="small", default=True),
                 "이메일": st.column_config.TextColumn("이메일", width="medium", help="클릭해서 이메일을 입력하세요."),
                 "제목": st.column_config.TextColumn("제목", width="large"),
+                "채널명": st.column_config.TextColumn("채널명", width="medium"),
                 "조회수": st.column_config.TextColumn("조회수", width="small"),
                 "게시일": st.column_config.TextColumn("게시일", width="small"),
                 "링크": st.column_config.LinkColumn("링크", display_text="보기", width="small"),
