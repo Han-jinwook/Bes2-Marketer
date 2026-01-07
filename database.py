@@ -340,7 +340,7 @@ class Database:
         """대기 중인 이메일 초안 상세 조회 (영상, 리드 정보 포함)"""
         try:
             response = self.client.table("drafts").select(
-                "*, videos(title, video_id), leads(channel_name, email, subscriber_count)"
+                "*, videos(*), leads(*)"
             ).eq("draft_type", "email").eq("status", "pending").order("created_at", desc=True).execute()
             return response.data or []
         except Exception as e:

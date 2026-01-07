@@ -727,8 +727,9 @@ with tab2:
     # 1. 대기 중인 초안 로드
     pending_drafts = db.get_pending_email_drafts_detailed()
     
+
     if not pending_drafts:
-        st.info("🎉 전송 대기 중인 이메일이 없습니다!")
+        st.info("🎉 전송 대기 중인 이메일이 없습니다! (분석된 영상이 없거나 모두 처리되었습니다.)")
     else:
         # Layout: Left (List) vs Right (Detail)
         col_list, col_detail = st.columns([1, 2])
@@ -740,17 +741,26 @@ with tab2:
             options = {}
             for d in pending_drafts:
                 lead = d.get("leads", {}) or {}
-                ch_name = lead.get("channel_name", "Unknown")
+                if isinstance(lead, list): lead = lead[0] if lead else {} # Join 리스트 대응
                 
-                # 라벨링 (실제 에러 메시지만 감지)
+                ch_name = lead.get("channel_name", "Unknown")
+                email_exists = bool(lead.get("email"))
+                
+                # 라벨링
                 content = d.get("content") or ""
-                is_error = (
+                is_junk = (
                     content.strip() == "" or 
                     content.startswith("[AI 에러]") or 
                     content.startswith("[오류]") or
                     "404 models/" in content
                 )
-                label_icon = "⚠️" if is_error else "📄"
+                
+                if is_junk:
+                    label_icon = "🗑️" # 쓰레기 데이터
+                elif not email_exists:
+                    label_icon = "⚠️" # 이메일 없음
+                else:
+                    label_icon = "📄" # 정상
                 
                 # 유니크한 키 생성을 위해 ID 일부 포함
                 label = f"{label_icon} {ch_name}"
@@ -769,18 +779,38 @@ with tab2:
             if selected_draft:
                 d = selected_draft
                 lead = d.get("leads", {}) or {}
-                to_email = lead.get('email')
+                if isinstance(lead, list): lead = lead[0] if lead else {}
                 
-                st.container(border=True).markdown(f"""
-                **받는 사람:** {lead.get('channel_name', 'Unknown')}  
-                **이메일:** `{to_email if to_email else '❌ 이메일 없음'}`  
-                **작성일:** {d.get('created_at', '')[:16]}
-                """)
+                current_email = lead.get('email') or ""
+                
+                st.markdown(f"**받는 사람:** {lead.get('channel_name', 'Unknown')}")
+                
+                # [NEW] 이메일 직접 수정/입력 기능
+                c_mail_input, c_mail_btn = st.columns([3, 1])
+                new_email_input = c_mail_input.text_input(
+                    "수신 이메일", 
+                    value=current_email, 
+                    placeholder="이메일이 없습니다. 입력해주세요.",
+                    label_visibility="collapsed",
+                    key=f"email_input_{d['id']}"
+                )
+                
+                if c_mail_btn.button("저장", key=f"btn_save_mail_{d['id']}"):
+                    if new_email_input.strip():
+                        db.update_lead(lead['id'], email=new_email_input.strip())
+                        st.toast("✅ 이메일 저장 완료!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.toast("⚠️ 이메일을 입력하세요.")
+
+                st.caption(f"작성일: {d.get('created_at', '')[:16]}")
+                st.markdown("---")
                 
                 # 본문 에디터
                 content = d.get("content") or ""
                 
-                # 오류 데이터 시각적 경고 (실제 에러 메시지만 감지)
+                # 오류 데이터 시각적 경고
                 is_junk = (
                     content.strip() == "" or 
                     content.startswith("[AI 에러]") or 
@@ -807,31 +837,39 @@ with tab2:
                     # 제목 추출 로직
                     lines = edited_content.split('\n')
                     subject = "Bes2 제안"
-                    body = edited_content
                     for line in lines:
                         if "제목:" in line or "Subject:" in line:
                             subject = line.replace("제목:", "").replace("Subject:", "").strip()
                             break
                             
                     btn_label = "🚀 이메일 전송"
+                    
+                    # 전송 버튼 활성화 조건: 이메일이 입력되어 있어야 함
+                    final_email = new_email_input.strip()
+                    can_send = bool(final_email) and not is_junk
+                    
                     if config.TEST_MODE:
                         btn_label += " (테스트 모드)"
                         
-                    if st.button(btn_label, type="primary", use_container_width=True, key=f"snd_{d['id']}", disabled=not to_email or is_junk):
+                    if st.button(btn_label, type="primary", use_container_width=True, key=f"snd_{d['id']}", disabled=not can_send):
                         if config.TEST_MODE:
                             st.toast(f"🧪 테스트 발송: {config.TEST_EMAIL}")
                         
-                        if emailer.send_email(to_email, subject, edited_content):
+                        if emailer.send_email(final_email, subject, edited_content):
                             db.update_draft_status(d['id'], "sent")
-                            st.success("✅ 전송 완료!")
+                            st.success(f"✅ 전송 완료! ({final_email})")
                             st.balloons()
                             time.sleep(1)
                             st.rerun()
                         else:
                             st.error("전송 실패. 설정을 확인하세요.")
+                        
+                        # 만약 이메일이 변경되었는데 저장을 안 눌렀을 수도 있으니, 전송 성공 시 자동 저장 시도
+                        if final_email != current_email:
+                            db.update_lead(lead['id'], email=final_email)
 
                 with c2:
-                    if st.button("💾 저장", use_container_width=True, key=f"sav_{d['id']}"):
+                    if st.button("💾 본문 저장", use_container_width=True, key=f"sav_{d['id']}"):
                          db.update_draft_content(d['id'], edited_content)
                          st.toast("✅ 내용이 저장되었습니다.")
                          time.sleep(0.5)
