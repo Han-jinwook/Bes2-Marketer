@@ -446,43 +446,27 @@ with tab1:
             view_count = v.get('view_count', 0)
             if isinstance(view_count, str):
                 view_count = int(view_count.replace(',', '')) if view_count.replace(',', '').isdigit() else 0
-            
-            # 이메일 추출 (직접 수정 가능하도록 텍스트로 표시)
-            ch_info = v.get("channel_info") or {}
-            email_addr = ch_info.get("email") or ""
-            
-            publisher = v.get("published_at", "")
-            pub_date = publisher[:10] if publisher else ""
 
+        # 1. 시각화용 데이터프레임 변환
+        video_data = []
+        for v in results:
+            selected = True # [UX] 기본적으로 전체 선택 상태
+            
+            # 이메일 표시 (DB 우선 -> 수집된 것 -> 빈 값)
+            email_addr = v.get("channel_info", {}).get("email", "")
+            
             video_data.append({
-                "선택": False,
-                "썸네일": v.get("thumbnail_url", ""),
+                "선택": selected,
+                "썸네일": v["thumbnail_url"],
                 "제목": v.get("title", "No Title"),
                 "이메일": email_addr, # [NEW] 직접 편집 가능
                 "채널명": v.get("channel_name", "Unknown"),
-                "게시일": pub_date,
-                "조회수": f"{view_count:,}",
+                "게시일": v.get("published_at", "")[:10] if v.get("published_at") else "",
+                "조회수": f"{v.get('view_count', 0):,}",
                 "링크": v.get("video_url", ""),
                 "video_id": v.get("video_id", ""),
                 "raw_data": v # 전체 데이터 보존 (참조용)
             })
-            
-
-        # [UX] 전체 선택/해제 토글
-        if "select_all_state" not in st.session_state:
-            st.session_state.select_all_state = False
-            
-        col_utils1, col_utils2 = st.columns([1, 5])
-        with col_utils1:
-            if st.checkbox("✅ 전체 선택", value=st.session_state.select_all_state, key="chk_select_all"):
-                st.session_state.select_all_state = True
-            else:
-                st.session_state.select_all_state = False
-        
-        # 데이터프레임 생성 시 전체 선택 상태 반영
-        for item in video_data:
-            if st.session_state.select_all_state:
-                item["선택"] = True
 
         df_videos = pd.DataFrame(video_data)
 
