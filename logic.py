@@ -81,9 +81,33 @@ class YouTubeHunter:
                     if vid in known_ids: continue
                     # (2) 한국어 체크
                     if not has_korean(snippet["title"]): continue
-                    # (3) 키워드 매칭
-                    search_context = (snippet["title"] + " " + snippet["description"]).lower()
-                    if not all(term.lower() in search_context for term in required_terms): continue
+                    # (3) [Strict Filter] 키워드 정밀 매칭 & 제외어 필터링
+                    
+                    # A. 검색 텍스트 (제목 + 설명)
+                    text_to_check = (snippet["title"] + " " + snippet["description"]).lower()
+                    
+                    # B. 제외어 (Negative Keywords) - 무조건 탈락
+                    # "클라우드(맥주)", "cloud(구름/하늘)", "빵(cloud bread)" 등 엉뚱한 거 제외
+                    negative_keywords = ["맥주", "beer", "날씨", "weather", "하늘", "sky", "빵", "bread"]
+                    if any(neg in text_to_check for neg in negative_keywords):
+                        continue
+
+                    # C. 포함어 (Positive Keywords) - 띄어쓰기는 AND, 쉼표는 OR
+                    # 전체 키워드 문자열(예: "사진 정리, 구글 클라우드 백업")을 쪼갬
+                    # -> ["사진 정리", "구글 클라우드 백업"] (OR 그룹)
+                    # -> "사진 정리" => "사진" AND "정리" 가 둘 다 있어야 함
+                    
+                    # 사용자 입력 전체 키워드 로드 (전역 settings 대신 현재 검색어 keyword 사용)
+                    # 현재 search_videos 함수는 'keyword' 인자로 "사진 정리" 등 1개의 구문만 받음.
+                    # 하지만 여기서 'keyword'는 Loop 바깥에서 호출자가 쪼개서 던져준 1개의 덩어리임.
+                    # 예: 사용자가 "사진 정리, 용량 부족" 입력 -> Loop 1: keyword="사진 정리", Loop 2: keyword="용량 부족"
+                    
+                    # 따라서 여기서는 keyword 변수(예: "구글 클라우드 백업") 안의 단어들이
+                    # "모두" 포함되어 있는지(AND)만 확인하면 됨.
+                    
+                    required_terms = keyword.split() # ["구글", "클라우드", "백업"]
+                    if not all(term.lower() in text_to_check for term in required_terms):
+                        continue
                     
                     collected_items.append({
                         "video_id": vid,
