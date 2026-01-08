@@ -684,13 +684,22 @@ with tab1:
                                 
                                 # 1. 자막 추출
                                 transcript = hunter.get_transcript(vid)
+                                content = ""
+                                content_source = "transcript"
                                 
-                                if not transcript:
-                                    st.toast(f"⏭️ 자막 없음 (품질 저하 방지) - 건너뜀: {v_title}", icon="⚠️")
-                                    continue
-                                
-                                content = transcript[:15000]
-                                
+                                if transcript:
+                                    content = transcript[:15000]
+                                else:
+                                    # Fallback: 자막 없으면 설명글 등 메타데이터 사용
+                                    # (사용자 요청: 이메일 생성 등 진행을 위해 무조건 분석 시도)
+                                    status_area.warning(f"⚠️ 자막 없음 -> 설명글로 대체 분석: {v_title}")
+                                    content = video.get("description", "") or video.get("title", "")
+                                    content_source = "description"
+                                    
+                                    # 만약 설명글도 너무 짧으면? (그래도 진행)
+                                    if len(content) < 10:
+                                        content += " (내용 부족)"
+
                                 # 2. AI 생성 (이메일, 댓글, 요약)
                                 email = copywriter.generate_email(
                                     channel_name=video["channel_name"],
@@ -727,7 +736,10 @@ with tab1:
                                     video_db_id = db_video["id"]
                                     saved_video = db.update_video(
                                         video_db_id,
-                                        transcript_text=content,
+                                        transcript_text=content if content_source == "transcript" else None, # 자막일 때만 저장, 아니면 기존 유지? 아니면 덮어쓰기? 
+                                        # 설명글로 대체했으면 transcript 필드에 넣기는 좀 그러니, summary에 설명글 요약 넣거나..
+                                        # 일단 transcript_text 컬럼에 넣으면 나중에 헷갈릴 수 있음.
+                                        # 하지만 create_video에서는 transcript_text에 넣고 있음. 일관성 유지.
                                         summary=summary,
                                         relevance_score=relevance["score"],
                                         # 필요한 경우 다른 필드도 업데이트
