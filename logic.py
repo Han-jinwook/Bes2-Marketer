@@ -168,6 +168,10 @@ class YouTubeHunter:
                 print(f"   - API returned: {len(items)} items")
                 print(f"   - Collected so far: {len(collected_items)}")
                 print(f"   - Filter Stats: {self._temp_filter_stats}")
+                
+                # [DEBUG] UI에도 표시
+                import streamlit as st
+                st.info(f"📊 Page {page_num+1}: API returned {len(items)}, Collected: {len(collected_items)}")
 
             except Exception as e:
                 import streamlit as st
