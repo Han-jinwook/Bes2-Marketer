@@ -133,9 +133,11 @@ class YouTubeHunter:
                     # 여기서는 간단하게 "검색어에 있는 단어가 하나라도 본문에 있으면 통과"
                     
                     if not any(term.lower() in text_to_check for term in required_terms):
-                        # print(f"Skipping {snippet['title']} (No keyword match)")
-                        # 통계용 키 없으면 추가하거나 무시 (기존 skipped_negative 재활용 혹은 그냥 넘어가기)
-                        continue
+                        # [FINAL CHANGE] Soft Filter도 끕니다.
+                        # 이유: 유튜브가 "사진 정리" 검색에 "용량 부족" 영상을 주면(문맥상 정답),
+                        # 내 코드가 "사진" 글자 없다고 버리는 게 문제임.
+                        # 유튜브의 Semantic Search를 100% 신뢰하고, 로컬 필터는 제거.
+                        pass 
                         
                     # D. (Optional) 제목이 너무 짧거나(무의미), 특정 조건 추가 가능
                     pass
