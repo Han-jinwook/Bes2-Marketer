@@ -264,11 +264,31 @@ class Database:
         response = self.client.table("videos").select("id").eq("video_id", video_id).execute()
         return len(response.data) > 0 if response.data else False
         
+    
     def delete_video_by_video_id(self, video_id: str) -> bool:
         """YouTube 영상 ID로 영상 삭제 (UI 편의용)"""
         response = self.client.table("videos").delete().eq("video_id", video_id).execute()
         return len(response.data) > 0 if response.data else False
     
+    # =========================================
+    # SETTINGS (설정) CRUD
+    # =========================================
+    
+    def get_setting(self, key: str) -> Optional[str]:
+        """설정값 가져오기"""
+        try:
+            response = self.client.table("settings").select("value").eq("key", key).execute()
+            if response.data:
+                return response.data[0]["value"]
+        except Exception:
+            pass # 테이블 없거나 에러 시 None 반환
+        return None
+        
+    def set_setting(self, key: str, value: str):
+        """설정값 저장하기 (Upsert)"""
+        data = {"key": key, "value": value}
+        self.client.table("settings").upsert(data).execute()
+
     # =========================================
     # DRAFTS (마케팅 초안) CRUD
     # =========================================

@@ -164,19 +164,11 @@ st.markdown("""
 # 키워드 저장 관리 (DB 연동)
 # =============================================
 
-def load_saved_keywords() -> str:
-    """저장된 키워드 불러오기 (DB)"""
-    default_kw = "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
-    try:
-        from database import db
-        return db.get_app_setting("search_keywords", default_kw)
-    except:
-        return default_kw
-
+# =============================================
+# Helper: 키워드 로컬 저장 (백업용) -> 실제로는 이미 DB 사용으로 대체됨
+# =============================================
 def save_keywords(keywords: str):
-    """키워드 저장하기 (DB)"""
-    from database import db
-    db.set_app_setting("search_keywords", keywords)
+    pass # No-op (kept for backward compatibility if called elsewhere)
 
 # =============================================
 # 세션 상태 초기화
@@ -184,8 +176,14 @@ def save_keywords(keywords: str):
 
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
+    
 if "saved_keywords" not in st.session_state:
-    st.session_state.saved_keywords = load_saved_keywords()
+    # [NEW] DB에서 영구 저장된 키워드 불러오기
+    saved = db.get_setting("search_keywords")
+    if saved:
+        st.session_state.saved_keywords = saved
+    else:
+        st.session_state.saved_keywords = config.DEFAULT_KEYWORDS
 if "selected_video" not in st.session_state:
     st.session_state.selected_video = None
 if "generated_drafts" not in st.session_state:
@@ -223,13 +221,16 @@ with st.sidebar:
     col_save1, col_save2 = st.columns([1, 1])
     with col_save1:
         if st.button("💾 키워드 저장", use_container_width=True):
-            save_keywords(keywords_input)
+            save_keywords(keywords_input) # 로컬 저장 (백업용)
+            db.set_setting("search_keywords", keywords_input) # DB 저장 (메인)
             st.session_state.saved_keywords = keywords_input
-            st.success("✅ DB에 영구 저장됨!")
+            st.toast("✅ DB에 영구 저장되었습니다!", icon="💾")
+            
     with col_save2:
         if st.button("🔄 초기화", use_container_width=True):
             default_kw = "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
             save_keywords(default_kw)
+            db.set_setting("search_keywords", default_kw)
             st.session_state.saved_keywords = default_kw
             st.rerun()
     
