@@ -336,14 +336,15 @@ with st.sidebar:
                         st.warning(f"🔍 '{keyword}' 검색 완료: **{len(videos)}개** 수집됨 (목표: {max_results}개)")
                             
                         # [UI] 필터링 통계 표시
-                            if filter_stats and sum(filter_stats.values()) > 0:
-                                with st.expander(f"📉 필터링 상세 내역 (수집 제외됨) - {keyword}", expanded=False):
-                                    c1, c2, c3, c4, c5 = st.columns(5)
-                                    c1.metric("DB 중복", filter_stats.get("skipped_db", 0), help="이미 DB에 있어서 건너뜀")
-                                    c2.metric("언어(非한글)", filter_stats.get("skipped_lang", 0))
-                                    c3.metric("제외어", filter_stats.get("skipped_negative", 0), help="맥주, 날씨 등 엉뚱한 키워드")
-                                    c4.metric("조회수 미달", filter_stats.get("skipped_view", 0))
-                                    c5.metric("이메일 없음", filter_stats.get("skipped_no_email", 0), help="'이메일 필수' 옵션 때문에 제외됨")
+                        if filter_stats and sum(filter_stats.values()) > 0:
+                            with st.expander(f"📉 필터링 상세 내역 (수집 제외됨) - {keyword}", expanded=False):
+                                c1, c2, c3, c4, c5 = st.columns(5)
+                                c1.metric("DB 중복", filter_stats.get("skipped_db", 0), help="이미 DB에 있어서 건너뜀")
+                                c2.metric("언어(非한글)", filter_stats.get("skipped_lang", 0))
+                                c3.metric("제외어", filter_stats.get("skipped_negative", 0), help="맥주, 날씨 등 엉뚱한 키워드")
+                                c4.metric("조회수 미달", filter_stats.get("skipped_view", 0))
+                                c5.metric("이메일 없음", filter_stats.get("skipped_no_email", 0), help="'이메일 필수' 옵션 때문에 제외됨")
+
 
                         
                         for video in videos:
