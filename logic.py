@@ -98,21 +98,21 @@ class YouTubeHunter:
                     if vid in known_ids: 
                         self._temp_filter_stats["skipped_db"] += 1
                         continue
-                    # (2) 한국어 체크
-                    if not has_korean(snippet["title"]): 
-                        self._temp_filter_stats["skipped_lang"] += 1
-                        continue
+                    # (2) 한국어 체크 [TEMP DISABLED FOR DEBUG]
+                    # if not has_korean(snippet["title"]): 
+                    #     self._temp_filter_stats["skipped_lang"] += 1
+                    #     continue
+                    
                     # (3) [Strict Filter] 키워드 정밀 매칭 & 제외어 필터링
                     
                     # A. 검색 텍스트 (제목 + 설명)
                     text_to_check = (snippet["title"] + " " + snippet["description"]).lower()
                     
-                    # B. 제외어 (Negative Keywords) - 무조건 탈락
-                    # "클라우드(맥주)", "cloud(구름/하늘)", "빵(cloud bread)" 등 엉뚱한 거 제외
-                    negative_keywords = ["맥주", "beer", "날씨", "weather", "하늘", "sky", "빵", "bread"]
-                    if any(neg in text_to_check for neg in negative_keywords):
-                        self._temp_filter_stats["skipped_negative"] += 1
-                        continue
+                    # B. 제외어 (Negative Keywords) [TEMP DISABLED FOR DEBUG]
+                    # negative_keywords = ["맥주", "beer", "날씨", "weather", "하늘", "sky", "빵", "bread"]
+                    # if any(neg in text_to_check for neg in negative_keywords):
+                    #     self._temp_filter_stats["skipped_negative"] += 1
+                    #     continue
 
                     # C. 포함어 (Positive Keywords) - 띄어쓰기는 AND, 쉼표는 OR
                     # 전체 키워드 문자열(예: "사진 정리, 구글 클라우드 백업")을 쪼갬
@@ -164,7 +164,10 @@ class YouTubeHunter:
                 import time, random
                 time.sleep(random.uniform(1, 3))
                 
-                print(f"Page {page_num+1} done. Collected candidates: {len(collected_items)}")
+                print(f"📊 Page {page_num+1} Stats:")
+                print(f"   - API returned: {len(items)} items")
+                print(f"   - Collected so far: {len(collected_items)}")
+                print(f"   - Filter Stats: {self._temp_filter_stats}")
 
             except Exception as e:
                 import streamlit as st
