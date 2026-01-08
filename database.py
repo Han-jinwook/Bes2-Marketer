@@ -191,7 +191,13 @@ class Database:
                 video_records.append(v_data)
                 
             except Exception as e:
-                print(f"Error preparing video data for {v.get('video_id', 'unknown')}: {e}")
+                error_msg = f"Error preparing video data for {v.get('video_id', 'unknown')}: {e}"
+                print(error_msg)
+                try:
+                    import streamlit as st
+                    st.error(f"❌ {error_msg}")
+                except:
+                    pass
                 
         # 3. 비디오 대량 Upsert
         if video_records:
