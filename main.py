@@ -183,7 +183,7 @@ if "saved_keywords" not in st.session_state:
     if saved:
         st.session_state.saved_keywords = saved
     else:
-        st.session_state.saved_keywords = config.DEFAULT_KEYWORDS
+        st.session_state.saved_keywords = "사진 정리, 갤러리 정리, 용량 부족, 구글포토 백업"
 if "selected_video" not in st.session_state:
     st.session_state.selected_video = None
 if "generated_drafts" not in st.session_state:
