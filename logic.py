@@ -125,11 +125,20 @@ class YouTubeHunter:
                     # 따라서 여기서는 keyword 변수(예: "구글 클라우드 백업") 안의 단어들이
                     # "모두" 포함되어 있는지(AND)만 확인하면 됨.
                     
-                    # required_terms = keyword.split() # ["구글", "클라우드", "백업"]
-                    # if not all(term.lower() in text_to_check for term in required_terms):
-                    #    # print(f"Skipping {snippet['title']} (Positive keyword mismatch)")
-                    #    continue
-                    # -> [Rollback] YouTube API 결과를 신뢰하고 너무 빡빡한 2차 필터링 해제
+                    # C. [Soft Filter] 느슨한 키워드 필터링 (최소 1개 단어 포함)
+                    # 유튜브 검색 결과가 가끔 엉뚱한 걸 주기도 하므로, 최소한 검색어 중 "하나라도" 들어있는지 확인
+                    required_terms = keyword.split() # ["구글", "클라우드", "백업"]
+                    
+                    # 너무 흔한 조사나 단어는 제외하고 핵심 단어만 체크 (선택 사항)
+                    # 여기서는 간단하게 "검색어에 있는 단어가 하나라도 본문에 있으면 통과"
+                    
+                    if not any(term.lower() in text_to_check for term in required_terms):
+                        # print(f"Skipping {snippet['title']} (No keyword match)")
+                        # 통계용 키 없으면 추가하거나 무시 (기존 skipped_negative 재활용 혹은 그냥 넘어가기)
+                        continue
+                        
+                    # D. (Optional) 제목이 너무 짧거나(무의미), 특정 조건 추가 가능
+                    pass
                     
                     collected_items.append({
                         "video_id": vid,
