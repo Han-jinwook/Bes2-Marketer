@@ -30,7 +30,7 @@ class Database:
         email: Optional[str] = None,
         keywords: Optional[list[str]] = None,
         channel_url: Optional[str] = None,
-        thumbnail_url: Optional[str] = None,
+        # thumbnail_url: Optional[str] = None,  # [REMOVED] leads 테이블에 없는 컬럼
         description: Optional[str] = None
     ) -> dict:
         """새 유튜버(리드) 생성"""
@@ -41,7 +41,7 @@ class Database:
             "email": email,
             "keywords": keywords or [],
             "channel_url": channel_url,
-            "thumbnail_url": thumbnail_url,
+            # "thumbnail_url": thumbnail_url,  # [REMOVED]
             "description": description,
             "status": "new"
         }
