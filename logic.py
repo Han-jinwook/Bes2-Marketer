@@ -152,7 +152,11 @@ class YouTubeHunter:
                 print(f"Page {page_num+1} done. Collected candidates: {len(collected_items)}")
 
             except Exception as e:
+                import streamlit as st
+                st.error(f"⚠️ YouTube API Error (Page {page_num}): {e}")
                 print(f"Search API Error: {e}")
+                # Don't break immediately, maybe retry? 
+                # For now, break to avoid infinite loops if key is dead.
                 break
         
         # 3. 2차 상세 조회 (통계 확인 및 이메일 사냥)
