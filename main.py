@@ -284,7 +284,7 @@ with st.sidebar:
     min_view_count = st.select_slider(
         "최소 조회수 (품질 필터)",
         options=[0, 100, 500, 1000, 5000, 10000],
-        value=100,
+        value=0,  # [FIX] 기본값 0으로 변경 (모든 영상 수집)
         help="이 조회수 미만인 영상은 수집하지 않습니다."
     )
 
