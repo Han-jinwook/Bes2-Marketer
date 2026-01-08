@@ -158,7 +158,7 @@ class Database:
                         channel_name=v["channel_name"],
                         channel_id=v["channel_id"],
                         subscriber_count=v.get("channel_info", {}).get("subscriber_count", 0),
-                        thumbnail_url=v.get("thumbnail_url"), # 채널 썸네일 대신 영상 썸네일이라도 일단 활용
+                        # thumbnail_url=v.get("thumbnail_url"), # [FIX] leads 테이블에 해당 컬럼 없음
                         email=v.get("channel_info", {}).get("email")
                     )
                 else:
