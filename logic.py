@@ -48,7 +48,9 @@ class YouTubeHunter:
         published_after = (datetime.utcnow() - timedelta(days=published_after_days)).isoformat("T") + "Z"
         print(f"Searching for '{keyword}' after {published_after}...")
         
-        known_ids = db.get_known_video_ids()
+        
+        # [TEMPORARY FIX] DB 중복 체크 비활성화 (데이터 재수집 허용)
+        known_ids = set()  # db.get_known_video_ids()
         collected_items = []
         next_page_token = None
         total_results_approx = 0
