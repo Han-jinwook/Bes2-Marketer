@@ -66,6 +66,7 @@ class YouTubeHunter:
         for page_num in range(10):
             try:
                 search_response = self.youtube.search().list(
+                    q=keyword, part="id,snippet", maxResults=50,
                     order="date", publishedAfter=published_after, type="video", pageToken=next_page_token
                 ).execute()
                 
