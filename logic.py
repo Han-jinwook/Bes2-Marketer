@@ -125,10 +125,11 @@ class YouTubeHunter:
                     # 따라서 여기서는 keyword 변수(예: "구글 클라우드 백업") 안의 단어들이
                     # "모두" 포함되어 있는지(AND)만 확인하면 됨.
                     
-                    required_terms = keyword.split() # ["구글", "클라우드", "백업"]
-                    if not all(term.lower() in text_to_check for term in required_terms):
-                        # print(f"Skipping {snippet['title']} (Positive keyword mismatch)")
-                        continue
+                    # required_terms = keyword.split() # ["구글", "클라우드", "백업"]
+                    # if not all(term.lower() in text_to_check for term in required_terms):
+                    #    # print(f"Skipping {snippet['title']} (Positive keyword mismatch)")
+                    #    continue
+                    # -> [Rollback] YouTube API 결과를 신뢰하고 너무 빡빡한 2차 필터링 해제
                     
                     collected_items.append({
                         "video_id": vid,
