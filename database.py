@@ -145,6 +145,7 @@ class Database:
     def upsert_scanned_videos(self, videos: list[dict]) -> int:
         """수집된 영상과 채널 정보를 한꺼번에 저장/업데이트 (Upsert)"""
         count = 0
+        video_records = [] # [FIX] 리스트 초기화 추가
         for v in videos:
             try:
                 # 1. 리드(채널)Upsert
