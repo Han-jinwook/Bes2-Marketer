@@ -542,19 +542,38 @@ with tab1:
         
         with col_del:
             if st.button("🗑️ 선택 삭제", type="secondary", use_container_width=True, disabled=selected_rows.empty):
-                # 선택된 video_id 목록 추출
-                ids_to_remove = set(selected_rows["video_id"].tolist())
-                
-                # 세션에서 제거 (검색 결과 필터링)
-                st.session_state.search_results = [
-                    v for v in st.session_state.search_results 
-                    if v["video_id"] not in ids_to_remove
-                ]
-                st.toast(f"🗑️ {len(ids_to_remove)}개 영상이 목록에서 제거되었습니다.")
-                time.sleep(1)
+                with st.spinner("Deleting..."):
+                    # 선택된 video_id 목록 추출
+                    ids_to_remove = set(selected_rows["video_id"].tolist())
+                    
+                    # 1. DB에서 실제 삭제
+                    deleted_count = 0
+                    for vid in ids_to_remove:
+                        if db.delete_video_by_video_id(vid):
+                            deleted_count += 1
+                    
+                    # 2. 세션에서 제거 (검색 결과 리스트 동기화)
+                    st.session_state.search_results = [
+                        v for v in st.session_state.search_results 
+                        if v["video_id"] not in ids_to_remove
+                    ]
+                    
+                    # 3. 캐시 삭제 (DB 뷰 갱신용)
+                    st.cache_data.clear()
+                    
+                st.success(f"🗑️ {deleted_count}개 영상이 DB 및 리스트에서 영구 삭제되었습니다.")
+                time.sleep(1.5)
                 st.rerun()
 
         with col_anal:
+             # 강제 재분석 옵션 추가
+            force_analysis = st.checkbox(
+                "🔄 이미 완료된 것도 다시 분석하기 (Force Re-run)", 
+                value=False,
+                key="force_reanalysis_toggle",
+                help="체크하면 DB에 이미 저장된 영상이라도 무조건 AI 분석을 다시 수행하고 저장합니다."
+            )
+            
             if st.button(f"🚀 선택한 {len(selected_rows)}개 영상 일괄 분석", type="primary", use_container_width=True, disabled=selected_rows.empty):
                     
                 pass
@@ -582,16 +601,23 @@ with tab1:
                         
                         try:
                             # -----------------------------------------------
-                            # [스마트 로직] DB 중복 확인 (비용 절약)
+                            # [스마트 로직] DB 상태 확인 (Deep Search 대응)
                             # -----------------------------------------------
-                            if db.video_exists(vid):
+                            # 영상이 DB에 있는지 확인
+                            db_video = db.get_video_by_video_id(vid)
+                            
+                            # 이미 분석된 건인지 확인 (초안 존재 여부)
+                            is_analyzed = False
+                            if db_video:
+                                db_drafts = db.get_drafts_by_video(db_video["id"])
+                                # 이메일 초안이 있으면 분석 완료된 것으로 간주
+                                if any(d.get("draft_type") == "email" for d in db_drafts):
+                                    is_analyzed = True
+
+                            if is_analyzed and not force_analysis:
                                 # A. 이미 분석된 경우 -> DB에서 로드 (비용 0원)
                                 status_area.info(f"💾 [DB 로드] '{v_title}' (비용 0원)")
-                                time.sleep(0.5) # UI 반영을 위한 짧은 대기
-                                
-                                # DB에서 데이터 가져오기
-                                db_video = db.get_video_by_video_id(vid)
-                                db_drafts = db.get_drafts_by_video(db_video["id"])
+                                time.sleep(0.5)
                                 
                                 email_content = ""
                                 comment_content = ""
@@ -614,25 +640,21 @@ with tab1:
                                 success_count += 1
                                 
                             else:
-                                # B. 새로운 영상 -> AI 분석 (비용 발생)
-                                status_area.warning(f"🤖 [AI 분석] '{v_title}' 분석 중...")
+                                # B. 분석 필요 (신규 영상 OR DB엔 있지만 분석 안된 영상 OR 강제 분석)
+                                status_msg = f"🤖 [AI 분석] '{v_title}' 분석 중..."
+                                if force_analysis: status_msg += " (강제 재분석)"
+                                status_area.warning(status_msg)
                                 
-                                # 1. 자막 추출 (자막 없으면 스킵 - 사용자 요청: 설명글 대체 금지)
+                                # 1. 자막 추출
                                 transcript = hunter.get_transcript(vid)
                                 
                                 if not transcript:
                                     st.toast(f"⏭️ 자막 없음 (품질 저하 방지) - 건너뜀: {v_title}", icon="⚠️")
                                     continue
                                 
-                                content = transcript[:15000]  # 길이 제한
+                                content = transcript[:15000]
                                 
-                                # 2. 적합성 분석 (생략 - 무조건 통과)
-                                relevance = {"score": 100, "reason": "Keyword Search Match"}
-                                
-                                # 2. 적합성 분석 (생략 - 무조건 통과)
-                                relevance = {"score": 100, "reason": "Keyword Search Match"}
-                                
-                                # 3. 이메일 & 댓글 생성
+                                # 2. AI 생성 (이메일, 댓글, 요약)
                                 email = copywriter.generate_email(
                                     channel_name=video["channel_name"],
                                     video_title=video["title"],
@@ -645,9 +667,10 @@ with tab1:
                                     video_content=content
                                 )
                                 summary = copywriter.summarize_video(content)
+                                relevance = {"score": 100} # 기본값
                                 
-                                # 4. DB 저장
-                                # (1) 리드 저장
+                                # 3. DB 저장/업데이트
+                                # (1) 리드 확보 (이미 있으면 ID만 가져옴)
                                 existing_lead = db.get_lead_by_channel_id(video["channel_id"])
                                 if existing_lead:
                                     lead_id = existing_lead["id"]
@@ -661,28 +684,52 @@ with tab1:
                                     )
                                     lead_id = lead["id"]
                                 
-                                # (2) 영상 저장
-                                saved_video = db.create_video(
-                                    video_id=vid,
-                                    title=v_title,
-                                    lead_id=lead_id,
-                                    view_count=int(str(video["view_count"]).replace(",", "")), # 콤마 제거
-                                    video_url=video["video_url"],
-                                    thumbnail_url=video["thumbnail_url"],
-                                    transcript_text=content,
-                                    summary=summary,
-                                    relevance_score=relevance["score"],
-                                    search_keyword=video.get("search_keyword", "")
-                                )
+                                # (2) 영상 저장 (Upsert Logic)
+                                if db_video:
+                                    # 이미 DB에 존재하면 -> 내용 업데이트 (자막, 요약 등)
+                                    video_db_id = db_video["id"]
+                                    saved_video = db.update_video(
+                                        video_db_id,
+                                        transcript_text=content,
+                                        summary=summary,
+                                        relevance_score=relevance["score"],
+                                        # 필요한 경우 다른 필드도 업데이트
+                                    )
+                                else:
+                                    # 없으면 -> 새로 생성
+                                    saved_video = db.create_video(
+                                        video_id=vid,
+                                        title=v_title,
+                                        lead_id=lead_id,
+                                        view_count=int(str(video.get("view_count", 0)).replace(",", "")),
+                                        video_url=video["video_url"],
+                                        thumbnail_url=video.get("thumbnail_url"),
+                                        transcript_text=content,
+                                        summary=summary,
+                                        relevance_score=relevance["score"],
+                                        search_keyword=video.get("search_keyword", "")
+                                    )
+                                
+                                if not saved_video:
+                                    raise Exception("Video DB Save Failed (Insert/Update returned empty)")
                                 video_db_id = saved_video["id"]
                                 
-                                # (3) 초안 저장
+                                # (3) 초안 저장 (항상 생성)
+                                # 기존 초안 삭제 후 재생성 (강제 분석 시 중복 방지)
+                                if force_analysis and db_video:
+                                    existing_drafts = db.get_drafts_by_video(video_db_id)
+                                    for ed in existing_drafts:
+                                        db.delete_draft(ed["id"])
+
                                 email_draft = db.create_draft(
                                     draft_type="email",
                                     content=email,
                                     video_id=video_db_id,
                                     lead_id=lead_id
                                 )
+                                if not email_draft:
+                                    raise Exception("Email Draft DB Save Failed")
+
                                 db.create_draft(
                                     draft_type="comment",
                                     content=comment,

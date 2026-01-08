@@ -263,6 +263,11 @@ class Database:
         """YouTube 영상 ID로 존재 여부 확인"""
         response = self.client.table("videos").select("id").eq("video_id", video_id).execute()
         return len(response.data) > 0 if response.data else False
+        
+    def delete_video_by_video_id(self, video_id: str) -> bool:
+        """YouTube 영상 ID로 영상 삭제 (UI 편의용)"""
+        response = self.client.table("videos").delete().eq("video_id", video_id).execute()
+        return len(response.data) > 0 if response.data else False
     
     # =========================================
     # DRAFTS (마케팅 초안) CRUD
