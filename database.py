@@ -185,7 +185,7 @@ class Database:
                     "upload_date": v["published_at"][:10],
                     "view_count": vc,
                     "video_url": v["video_url"],
-                    "thumbnail_url": v["thumbnail_url"],
+                    # "thumbnail_url": v["thumbnail_url"],  # [REMOVED] videos 테이블에도 없음
                     "search_keyword": v.get("search_keyword")
                 }
                 video_records.append(v_data)
