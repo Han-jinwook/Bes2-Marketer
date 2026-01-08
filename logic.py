@@ -37,7 +37,7 @@ class YouTubeHunter:
             print(f"Warning: Failed to initialize YouTube API: {e}")
             self.youtube = None
     
-    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0, require_email: bool = False) -> tuple[list[dict], int]:
+    def search_videos(self, keyword: str, max_results: int = 10, published_after_days: int = 30, min_view_count: int = 0, require_email: bool = False) -> tuple[list[dict], int, dict]:
         """
         유튜브 영상 검색 (Deep Search 적용)
         - require_email=True 시 이메일 없는 영상은 결과에서 제외
@@ -53,13 +53,27 @@ class YouTubeHunter:
         next_page_token = None
         total_results_approx = 0
         
+        # 필터링 통계 초기화
+        self._temp_filter_stats = {
+            "skipped_db": 0,
+            "skipped_lang": 0,
+            "skipped_negative": 0,
+            "skipped_view": 0,
+            "skipped_no_email": 0
+        }
+        
         # 2. 1차 검색 (최대 10페이지 = 500개 후보군 탐색)
         for page_num in range(10):
             try:
                 search_response = self.youtube.search().list(
-                    q=keyword, part="id,snippet", maxResults=50,
                     order="date", publishedAfter=published_after, type="video", pageToken=next_page_token
                 ).execute()
+                
+                # [STATS] 필터링 통계
+                filter_stats = getattr(self, "_temp_filter_stats", {
+                    "skipped_db": 0, "skipped_lang": 0, "skipped_negative": 0, 
+                    "skipped_view": 0, "skipped_no_email": 0
+                })
                 
                 if page_num == 0:
                     total_results_approx = search_response.get("pageInfo", {}).get("totalResults", 0)
@@ -78,9 +92,13 @@ class YouTubeHunter:
                     snippet = item["snippet"]
                     
                     # (1) DB 중복 체크
-                    if vid in known_ids: continue
+                    if vid in known_ids: 
+                        self._temp_filter_stats["skipped_db"] += 1
+                        continue
                     # (2) 한국어 체크
-                    if not has_korean(snippet["title"]): continue
+                    if not has_korean(snippet["title"]): 
+                        self._temp_filter_stats["skipped_lang"] += 1
+                        continue
                     # (3) [Strict Filter] 키워드 정밀 매칭 & 제외어 필터링
                     
                     # A. 검색 텍스트 (제목 + 설명)
@@ -90,6 +108,7 @@ class YouTubeHunter:
                     # "클라우드(맥주)", "cloud(구름/하늘)", "빵(cloud bread)" 등 엉뚱한 거 제외
                     negative_keywords = ["맥주", "beer", "날씨", "weather", "하늘", "sky", "빵", "bread"]
                     if any(neg in text_to_check for neg in negative_keywords):
+                        self._temp_filter_stats["skipped_negative"] += 1
                         continue
 
                     # C. 포함어 (Positive Keywords) - 띄어쓰기는 AND, 쉼표는 OR
@@ -107,6 +126,7 @@ class YouTubeHunter:
                     
                     required_terms = keyword.split() # ["구글", "클라우드", "백업"]
                     if not all(term.lower() in text_to_check for term in required_terms):
+                        # print(f"Skipping {snippet['title']} (Positive keyword mismatch)")
                         continue
                     
                     collected_items.append({
@@ -174,6 +194,7 @@ class YouTubeHunter:
                             v["view_count"] = view_count
                         
                         if min_view_count > 0 and view_count < min_view_count:
+                            self._temp_filter_stats["skipped_view"] += 1
                             continue
                             
                         # 이메일 추출 (3단계 전략)
@@ -203,6 +224,7 @@ class YouTubeHunter:
                             
                         # 이메일 필수 필터링
                         if require_email and not email:
+                            self._temp_filter_stats["skipped_no_email"] += 1
                             continue
                             
                         v["channel_info"] = {
@@ -217,7 +239,7 @@ class YouTubeHunter:
                 return collected_items[:max_results], 0
 
         # 필터링 후 최종 결과 리턴
-        return final_items, total_results_approx
+        return final_items, total_results_approx, self._temp_filter_stats
     
     def _extract_email_from_text(self, text: str) -> Optional[str]:
         """텍스트에서 이메일 패턴 추출"""
