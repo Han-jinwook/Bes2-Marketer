@@ -312,27 +312,8 @@ with st.sidebar:
                     
                     for i, keyword in enumerate(keywords):
                         st.text(f"Scanning: {keyword}")
-                            max_results=max_results,
-                            published_after_days=published_after,
-                            min_view_count=min_view_count,
-                            require_email=require_email
-                        )
-                        
-                        # Unpack stats if available (New logic.py returns 3 items)
-                        filter_stats = {}
-                        if isinstance(videos, tuple):
-                             # To handle mismatch if logic.py update was partial, but here we assume it returns 3
-                             # But wait, search_videos returns tuple of 3 now.
-                             # Python unpacking:
-                             # videos_list, total, stats = hunter.search_videos(...)
-                             # But I assigned to `videos, total_count` above which might fail if 3 returned
-                             pass
-                        
-                        # Correct unpacking
-                        # Since I can't easily change the line above in this chunk without context shift,
-                        # I will rewrite the call.
-                        
-                        # RE-WRITING THE CALL BLOCK:
+                        # Search Videos
+
                         results = hunter.search_videos(
                             keyword=keyword,
                             max_results=max_results,
