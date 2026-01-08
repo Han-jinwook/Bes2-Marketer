@@ -187,15 +187,29 @@ class Database:
                     "thumbnail_url": v["thumbnail_url"],
                     "search_keyword": v.get("search_keyword")
                 }
-                
-                # Supabase upsert (video_id 기준으로 중복 체크)
-                self.client.table("videos").upsert(v_data, on_conflict="video_id").execute()
-                count += 1
+                video_records.append(v_data)
                 
             except Exception as e:
-                print(f"Error upserting video {v['video_id']}: {e}")
+                print(f"Error preparing video data for {v.get('video_id', 'unknown')}: {e}")
                 
-        return count
+        # 3. 비디오 대량 Upsert
+        if video_records:
+            try:
+                # print(f"Upserting {len(video_records)} videos...")
+                result = self.client.table("videos").upsert(video_records, on_conflict="video_id").execute()
+                return len(result.data) if result.data else 0
+            except Exception as e:
+                # DB 저장 실패 시 원인 파악용 로그
+                print(f"❌ DB Video Upsert Error: {e}")
+                # Streamlit 환경이라면 화면에도 표시
+                try:
+                    import streamlit as st
+                    st.error(f"❌ DB 저장 실패 (Videos): {e}")
+                except:
+                    pass
+                return 0
+        
+        return 0
 
     def get_video_by_video_id(self, video_id: str) -> Optional[dict]:
         """YouTube 영상 ID로 조회"""
