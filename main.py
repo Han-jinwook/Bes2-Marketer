@@ -332,7 +332,10 @@ with st.sidebar:
                         if total_count > 0:
                             st.caption(f"📊 YouTube 검색 결과: 약 {total_count:,}개의 영상이 발견되었습니다.")
                             
-                            # [UI] 필터링 통계 표시
+                        # [DEBUG] 실제 수집된 개수 표시
+                        st.warning(f"🔍 '{keyword}' 검색 완료: **{len(videos)}개** 수집됨 (목표: {max_results}개)")
+                            
+                        # [UI] 필터링 통계 표시
                             if filter_stats and sum(filter_stats.values()) > 0:
                                 with st.expander(f"📉 필터링 상세 내역 (수집 제외됨) - {keyword}", expanded=False):
                                     c1, c2, c3, c4, c5 = st.columns(5)
