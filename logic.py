@@ -220,10 +220,12 @@ class YouTubeHunter:
                             email = self._deep_scan_email(cid)
 
                             
-                        # 이메일 필수 필터링
-                        if require_email and not email:
-                            self._temp_filter_stats["skipped_no_email"] += 1
-                            continue
+                            
+                        # [REMOVED] 이메일 필수 필터링 제거 - 사용자 요청
+                        # 이메일 없어도 모두 수집하고, 나중에 수동으로 입력
+                        # if require_email and not email:
+                        #     self._temp_filter_stats["skipped_no_email"] += 1
+                        #     continue
                             
                         v["channel_info"] = {
                             "subscriber_count": chan_info.get("subscriber_count", 0),
