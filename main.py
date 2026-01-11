@@ -277,8 +277,8 @@ with st.sidebar:
             step=50,
             help="한 번 서칭할 때 최대 몇 개의 영상을 가져올지 설정합니다."
         )
-        # [NEW] 이메일 필수 옵션
-        require_email = st.checkbox("이메일 없는 영상은 수집 안 함", value=False, help="체크하면 이메일이 발견된 채널의 영상만 수집합니다. (수집량이 줄어들 수 있음)")
+        # [REMOVED] 이메일 필수 옵션 제거 - 항상 모든 영상 수집
+        require_email = False  # 이메일 유무와 관계없이 모든 영상 수집
     
     # [NEW] 최소 조회수 설정 (품질 필터)
     min_view_count = st.select_slider(
