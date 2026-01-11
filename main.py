@@ -1296,10 +1296,10 @@ with tab4:
             import google.generativeai as genai
             
             models_to_test = [
-                "models/gemini-1.5-flash-latest",
-                "models/gemini-1.5-flash",
-                "models/gemini-1.5-pro",
-                "models/gemini-pro"
+                "gemini-1.5-flash-latest",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+                "gemini-pro"
             ]
             
             working_model = None
