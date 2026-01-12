@@ -246,6 +246,40 @@ class Database:
         except Exception as e:
             print(f"Error deleting video {video_id}: {e}")
             return False
+
+    def get_pending_email_drafts(self):
+        """대기 중인 이메일 초안 조회"""
+        try:
+            # status가 'generated'인 초안 조회
+            docs = self.drafts_ref.where('status', '==', 'generated').stream()
+            return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+        except Exception as e:
+            print(f"Error getting pending drafts: {e}")
+            return []
+
+    def get_pending_email_drafts_detailed(self):
+        """UI 표시용 상세 이메일 초안 조회"""
+        try:
+            drafts = self.get_pending_email_drafts()
+            detailed_drafts = []
+            
+            for draft in drafts:
+                # 필수 필드 추출 (안전하게 .get 사용)
+                detailed_drafts.append({
+                    "id": draft.get('id'),
+                    "video_title": draft.get('video_title', 'Unknown'),
+                    "channel_name": draft.get('channel_name', 'Unknown'),
+                    "draft_content": draft.get('draft_content', ''),
+                    "video_id": draft.get('video_id', ''),
+                    "lead_id": draft.get('lead_id', ''),
+                    "email": draft.get('email', 'N/A'),
+                    "created_at": draft.get('created_at')
+                })
+            
+            return detailed_drafts
+        except Exception as e:
+            print(f"Error getting detailed drafts: {e}")
+            return []
     
     def get_all_videos(self) -> List[dict]:
         """모든 영상 조회 (lead 정보 포함)"""
