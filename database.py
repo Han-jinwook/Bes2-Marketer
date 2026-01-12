@@ -33,6 +33,11 @@ class Database:
                     cred = credentials.Certificate(firebase_creds)
                     print("✅ Firebase initialized from root secrets")
                 
+                # [NEW] 키가 없거나 형식이 안 맞는 경우 고의로 에러 발생 (디버깅용)
+                else:
+                    available_keys = list(st.secrets.keys()) if hasattr(st, 'secrets') else "None"
+                    raise ValueError(f"키를 찾을 수 없습니다. 현재 인식된 키 목록: {available_keys}")
+                
                 if cred:
                     firebase_admin.initialize_app(cred)
                     self.db = firestore.client()
