@@ -18,16 +18,28 @@ class Database:
             # 1. Streamlit Cloud에서 실행 중인 경우 (st.secrets 사용)
             try:
                 import streamlit as st
+                cred = None
+                
+                # 1-1. [firebase] 섹션 확인
                 if hasattr(st, 'secrets') and 'firebase' in st.secrets:
-                    # Secrets에서 Firebase 인증 정보 로드
                     firebase_creds = dict(st.secrets['firebase'])
                     cred = credentials.Certificate(firebase_creds)
+                    print("✅ Firebase initialized from [firebase] section")
+                
+                # 1-2. Root Level Secrets 확인
+                elif hasattr(st, 'secrets') and 'project_id' in st.secrets and 'private_key' in st.secrets:
+                    firebase_creds = dict(st.secrets)
+                    cred = credentials.Certificate(firebase_creds)
+                    print("✅ Firebase initialized from root secrets")
+                
+                if cred:
                     firebase_admin.initialize_app(cred)
-                    print("✅ Firebase initialized from Streamlit Secrets")
                     self.db = firestore.client()
                     return
             except Exception as e:
-                print(f"Streamlit Secrets not found, trying local file... ({e})")
+                print(f"Streamlit Secrets failed, trying local file... ({e})")
+
+
             
             # 2. 로컬 개발 환경 (firebase-key.json 사용)
             try:
