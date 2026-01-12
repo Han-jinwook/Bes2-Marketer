@@ -1,5 +1,6 @@
 # 환경 변수 (API 키 보호!)
 .env
+firebase-key.json
 
 # Python
 __pycache__/

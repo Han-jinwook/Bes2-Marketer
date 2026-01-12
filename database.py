@@ -1,26 +1,56 @@
 """
-Bes2 Marketer - Database Module
-Supabase 연결 및 CRUD 함수
+Firebase Firestore Database Manager
+Supabase에서 Firebase로 마이그레이션 (2026-01-13)
 """
 
+import firebase_admin
+from firebase_admin import credentials, firestore
+from typing import Optional, List, Dict
 from datetime import datetime
-from typing import Optional
-from supabase import create_client, Client
-from config import config
-
+import os
 
 class Database:
-    """Supabase 데이터베이스 클라이언트"""
+    """Firebase Firestore 데이터베이스 관리 클래스"""
     
     def __init__(self):
-        self.client: Client = create_client(
-            config.SUPABASE_URL,
-            config.SUPABASE_KEY
-        )
+        """Firebase 초기화 (로컬 및 Streamlit Cloud 지원)"""
+        if not firebase_admin._apps:
+            # 1. Streamlit Cloud에서 실행 중인 경우 (st.secrets 사용)
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and 'firebase' in st.secrets:
+                    # Secrets에서 Firebase 인증 정보 로드
+                    firebase_creds = dict(st.secrets['firebase'])
+                    cred = credentials.Certificate(firebase_creds)
+                    firebase_admin.initialize_app(cred)
+                    print("✅ Firebase initialized from Streamlit Secrets")
+                    self.db = firestore.client()
+                    return
+            except Exception as e:
+                print(f"Streamlit Secrets not found, trying local file... ({e})")
+            
+            # 2. 로컬 개발 환경 (firebase-key.json 사용)
+            try:
+                cred_path = os.path.join(os.path.dirname(__file__), 'firebase-key.json')
+                if os.path.exists(cred_path):
+                    cred = credentials.Certificate(cred_path)
+                    firebase_admin.initialize_app(cred)
+                    print("✅ Firebase initialized from local JSON file")
+                else:
+                    raise FileNotFoundError("firebase-key.json not found")
+            except Exception as e:
+                print(f"❌ Firebase initialization failed: {e}")
+                raise
+        
+        self.db = firestore.client()
+        
+        # 컬렉션 참조
+        self.leads_ref = self.db.collection('leads')
+        self.videos_ref = self.db.collection('videos')
+        self.drafts_ref = self.db.collection('drafts')
+        self.settings_ref = self.db.collection('settings')
     
-    # =========================================
-    # LEADS (유튜버 정보) CRUD
-    # =========================================
+    # ==================== LEADS (채널 정보) ====================
     
     def create_lead(
         self,
@@ -30,7 +60,6 @@ class Database:
         email: Optional[str] = None,
         keywords: Optional[list[str]] = None,
         channel_url: Optional[str] = None,
-        # thumbnail_url: Optional[str] = None,  # [REMOVED] leads 테이블에 없는 컬럼
         description: Optional[str] = None
     ) -> dict:
         """새 유튜버(리드) 생성"""
@@ -40,129 +69,102 @@ class Database:
             "subscriber_count": subscriber_count,
             "email": email,
             "keywords": keywords or [],
-            "channel_url": channel_url,
-            # "thumbnail_url": thumbnail_url,  # [REMOVED]
+            "channel_url": channel_url or f"https://youtube.com/channel/{channel_id}",
             "description": description,
-            "status": "new"
+            "status": "new",
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP
         }
         
-        response = self.client.table("leads").insert(data).execute()
-        return response.data[0] if response.data else {}
-    
-    def get_lead_by_id(self, lead_id: str) -> Optional[dict]:
-        """ID로 리드 조회"""
-        response = self.client.table("leads").select("*").eq("id", lead_id).execute()
-        return response.data[0] if response.data else None
+        doc_ref = self.leads_ref.document()  # Auto-generate ID
+        doc_ref.set(data)
+        
+        # 생성된 문서 반환
+        doc = doc_ref.get()
+        return {"id": doc.id, **doc.to_dict()}
     
     def get_lead_by_channel_id(self, channel_id: str) -> Optional[dict]:
         """채널 ID로 리드 조회"""
-        response = self.client.table("leads").select("*").eq("channel_id", channel_id).execute()
-        return response.data[0] if response.data else None
+        docs = self.leads_ref.where('channel_id', '==', channel_id).limit(1).stream()
+        for doc in docs:
+            return {"id": doc.id, **doc.to_dict()}
+        return None
     
-    def get_all_leads(
-        self,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> list[dict]:
-        """모든 리드 조회 (필터 및 페이지네이션 지원)"""
-        query = self.client.table("leads").select("*")
-        
-        if status:
-            query = query.eq("status", status)
-        
-        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
-        response = query.execute()
-        return response.data or []
-    
-    def update_lead(self, lead_id: str, **kwargs) -> Optional[dict]:
+    def update_lead(self, lead_id: str, **kwargs) -> dict:
         """리드 정보 업데이트"""
-        response = self.client.table("leads").update(kwargs).eq("id", lead_id).execute()
-        return response.data[0] if response.data else None
+        kwargs['updated_at'] = firestore.SERVER_TIMESTAMP
+        self.leads_ref.document(lead_id).update(kwargs)
+        
+        doc = self.leads_ref.document(lead_id).get()
+        return {"id": doc.id, **doc.to_dict()}
     
-    def update_lead_status(self, lead_id: str, status: str) -> Optional[dict]:
-        """리드 상태 업데이트"""
-        return self.update_lead(lead_id, status=status)
+    def get_all_leads(self) -> List[dict]:
+        """모든 리드 조회"""
+        docs = self.leads_ref.stream()
+        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
     
-    def delete_lead(self, lead_id: str) -> bool:
-        """리드 삭제"""
-        response = self.client.table("leads").delete().eq("id", lead_id).execute()
-        return len(response.data) > 0 if response.data else False
-    
-    def search_leads(self, keyword: str) -> list[dict]:
-        """채널명으로 리드 검색"""
-        response = self.client.table("leads").select("*").ilike("channel_name", f"%{keyword}%").execute()
-        return response.data or []
-    
-    # =========================================
-    # VIDEOS (영상 정보) CRUD
-    # =========================================
+    # ==================== VIDEOS (영상 정보) ====================
     
     def create_video(
         self,
         video_id: str,
         title: str,
-        lead_id: Optional[str] = None,
-        upload_date: Optional[str] = None,
+        lead_id: str,
+        upload_date: str,
         view_count: int = 0,
-        like_count: int = 0,
-        comment_count: int = 0,
         video_url: Optional[str] = None,
-        thumbnail_url: Optional[str] = None,
-        transcript_text: Optional[str] = None,
-        summary: Optional[str] = None,
-        relevance_score: float = 0.0,
         search_keyword: Optional[str] = None
     ) -> dict:
-        """새 영상 정보 생성"""
+        """새 영상 생성"""
         data = {
             "video_id": video_id,
             "title": title,
             "lead_id": lead_id,
             "upload_date": upload_date,
             "view_count": view_count,
-            "like_count": like_count,
-            "comment_count": comment_count,
-            "video_url": video_url,
-            "thumbnail_url": thumbnail_url,
-            "transcript_text": transcript_text,
-            "summary": summary,
-            "relevance_score": relevance_score,
-            "search_keyword": search_keyword
+            "video_url": video_url or f"https://youtube.com/watch?v={video_id}",
+            "search_keyword": search_keyword,
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP
         }
         
-        # None 값 제거
-        data = {k: v for k, v in data.items() if v is not None}
+        # video_id를 문서 ID로 사용 (중복 방지)
+        doc_ref = self.videos_ref.document(video_id)
+        doc_ref.set(data, merge=True)  # Upsert
         
-        response = self.client.table("videos").insert(data).execute()
-        return response.data[0] if response.data else {}
+        doc = doc_ref.get()
+        return {"id": doc.id, **doc.to_dict()}
     
-    def get_video_by_id(self, id: str) -> Optional[dict]:
-        """UUID로 영상 조회"""
-        response = self.client.table("videos").select("*").eq("id", id).execute()
-        return response.data[0] if response.data else None
+    def get_video_by_video_id(self, video_id: str) -> Optional[dict]:
+        """YouTube 영상 ID로 조회"""
+        doc = self.videos_ref.document(video_id).get()
+        if doc.exists:
+            return {"id": doc.id, **doc.to_dict()}
+        return None
+    
+    def get_known_video_ids(self) -> set:
+        """이미 DB에 있는 영상 ID 목록"""
+        docs = self.videos_ref.stream()
+        return {doc.id for doc in docs}
     
     def upsert_scanned_videos(self, videos: list[dict]) -> int:
-        """수집된 영상과 채널 정보를 한꺼번에 저장/업데이트 (Upsert)"""
+        """수집된 영상과 채널 정보를 한꺼번에 저장/업데이트"""
         count = 0
-        video_records = [] # [FIX] 리스트 초기화 추가
+        
         for v in videos:
             try:
-                # 1. 리드(채널)Upsert
-                # 채널 ID로 기존 리드 확인
+                # 1. 리드(채널) Upsert
                 lead = self.get_lead_by_channel_id(v["channel_id"])
                 
                 if not lead:
-                    # 없으면 새로 생성
                     lead = self.create_lead(
                         channel_name=v["channel_name"],
                         channel_id=v["channel_id"],
                         subscriber_count=v.get("channel_info", {}).get("subscriber_count", 0),
-                        # thumbnail_url=v.get("thumbnail_url"), # [FIX] leads 테이블에 해당 컬럼 없음
                         email=v.get("channel_info", {}).get("email")
                     )
                 else:
-                    # 있으면 정보 업데이트 (이메일 등 최신화)
+                    # 이메일 등 최신화
                     update_data = {}
                     if not lead.get("email") and v.get("channel_info", {}).get("email"):
                         update_data["email"] = v["channel_info"]["email"]
@@ -173,380 +175,132 @@ class Database:
                         self.update_lead(lead["id"], **update_data)
                 
                 # 2. 영상 Upsert
-                # 조회수 숫자 변환
                 vc = v.get("view_count", 0)
                 if isinstance(vc, str):
                     vc = int(vc.replace(',', '')) if vc.replace(',', '').isdigit() else 0
                 
-                v_data = {
-                    "video_id": v["video_id"],
-                    "title": v["title"],
-                    "lead_id": lead["id"],
-                    "upload_date": v["published_at"][:10],
-                    "view_count": vc,
-                    "video_url": v["video_url"],
-                    # "thumbnail_url": v["thumbnail_url"],  # [REMOVED] videos 테이블에도 없음
-                    "search_keyword": v.get("search_keyword")
-                }
-                video_records.append(v_data)
+                self.create_video(
+                    video_id=v["video_id"],
+                    title=v["title"],
+                    lead_id=lead["id"],
+                    upload_date=v["published_at"][:10],
+                    view_count=vc,
+                    video_url=v["video_url"],
+                    search_keyword=v.get("search_keyword")
+                )
+                
+                count += 1
                 
             except Exception as e:
-                error_msg = f"Error preparing video data for {v.get('video_id', 'unknown')}: {e}"
-                print(error_msg)
-                try:
-                    import streamlit as st
-                    st.error(f"❌ {error_msg}")
-                except:
-                    pass
+                print(f"Error upserting video {v.get('video_id', 'unknown')}: {e}")
                 
-        # 3. 비디오 대량 Upsert
-        if video_records:
-            try:
-                # print(f"Upserting {len(video_records)} videos...")
-                result = self.client.table("videos").upsert(video_records, on_conflict="video_id").execute()
-                return len(result.data) if result.data else 0
-            except Exception as e:
-                # DB 저장 실패 시 원인 파악용 로그
-                print(f"❌ DB Video Upsert Error: {e}")
-                # Streamlit 환경이라면 화면에도 표시
-                try:
-                    import streamlit as st
-                    st.error(f"❌ DB 저장 실패 (Videos): {e}")
-                except:
-                    pass
-                return 0
-        
-        return 0
-
-    def get_video_by_video_id(self, video_id: str) -> Optional[dict]:
-        """YouTube 영상 ID로 조회"""
-        try:
-            response = self.client.table("videos").select("*").eq("video_id", video_id).execute()
-            return response.data[0] if response.data else None
-        except Exception as e:
-            print(f"Error fetching video: {e}")
-            return None
-
-    def get_known_video_ids(self) -> set:
-        """DB에 저장된 모든 Video ID 조회 (중복 검색 방지용)"""
-        try:
-            # 1000개 제한이 있을 수 있으니 range를 넉넉하게 잡거나, 일단은 기본으로
-            # Supabase default limit might be 1000. For now, simple select is okay.
-            response = self.client.table("videos").select("video_id").execute()
-            return {item["video_id"] for item in response.data} if response.data else set()
-        except Exception as e:
-            print(f"Error fetching known video IDs: {e}")
-            return set()
-    
-    def get_videos_by_lead(self, lead_id: str) -> list[dict]:
-        """특정 리드의 모든 영상 조회"""
-        response = self.client.table("videos").select("*").eq("lead_id", lead_id).order("upload_date", desc=True).execute()
-        return response.data or []
-    
-    def get_all_videos(
-        self,
-        min_relevance: Optional[float] = None,
-        search_keyword: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> list[dict]:
-        """모든 영상 조회 (필터 및 페이지네이션 지원)"""
-        query = self.client.table("videos").select("*")
-        
-        if min_relevance is not None:
-            query = query.gte("relevance_score", min_relevance)
-        
-        if search_keyword:
-            query = query.eq("search_keyword", search_keyword)
-        
-        query = query.order("relevance_score", desc=True).range(offset, offset + limit - 1)
-        response = query.execute()
-        return response.data or []
-    
-    def update_video(self, id: str, **kwargs) -> Optional[dict]:
-        """영상 정보 업데이트"""
-        response = self.client.table("videos").update(kwargs).eq("id", id).execute()
-        return response.data[0] if response.data else None
-    
-    def update_video_transcript(self, id: str, transcript_text: str, summary: Optional[str] = None) -> Optional[dict]:
-        """영상 자막 및 요약 업데이트"""
-        data = {"transcript_text": transcript_text}
-        if summary:
-            data["summary"] = summary
-        return self.update_video(id, **data)
-    
-    def delete_video(self, id: str) -> bool:
-        """영상 삭제"""
-        response = self.client.table("videos").delete().eq("id", id).execute()
-        return len(response.data) > 0 if response.data else False
-    
-    def video_exists(self, video_id: str) -> bool:
-        """YouTube 영상 ID로 존재 여부 확인"""
-        response = self.client.table("videos").select("id").eq("video_id", video_id).execute()
-        return len(response.data) > 0 if response.data else False
-        
+        return count
     
     def delete_video_by_video_id(self, video_id: str) -> bool:
-        """YouTube 영상 ID로 영상 삭제 (UI 편의용)"""
-        response = self.client.table("videos").delete().eq("video_id", video_id).execute()
-        return len(response.data) > 0 if response.data else False
-    
-    # =========================================
-    # SETTINGS (설정) CRUD
-    # =========================================
-    
-    def get_setting(self, key: str) -> Optional[str]:
-        """설정값 가져오기"""
+        """영상 삭제 (YouTube video_id 기준)"""
         try:
-            response = self.client.table("settings").select("value").eq("key", key).execute()
-            if response.data:
-                return response.data[0]["value"]
-        except Exception:
-            pass # 테이블 없거나 에러 시 None 반환
-        return None
+            self.videos_ref.document(video_id).delete()
+            return True
+        except Exception as e:
+            print(f"Error deleting video {video_id}: {e}")
+            return False
+    
+    def get_all_videos(self) -> List[dict]:
+        """모든 영상 조회 (lead 정보 포함)"""
+        docs = self.videos_ref.stream()
+        videos = []
         
-    def set_setting(self, key: str, value: str):
-        """설정값 저장하기 (Upsert)"""
-        data = {"key": key, "value": value}
-        self.client.table("settings").upsert(data).execute()
-
-    # =========================================
-    # DRAFTS (마케팅 초안) CRUD
-    # =========================================
+        for doc in docs:
+            video_data = {"id": doc.id, **doc.to_dict()}
+            
+            # Lead 정보 조인
+            if "lead_id" in video_data:
+                lead_doc = self.leads_ref.document(video_data["lead_id"]).get()
+                if lead_doc.exists:
+                    video_data["lead"] = lead_doc.to_dict()
+            
+            videos.append(video_data)
+        
+        return videos
+    
+    # ==================== DRAFTS (이메일 초안) ====================
     
     def create_draft(
         self,
-        draft_type: str,
-        content: str,
-        video_id: Optional[str] = None,
-        lead_id: Optional[str] = None,
-        tone: Optional[str] = None,
-        language: str = "ko"
+        video_id: str,
+        subject: str,
+        body: str,
+        model_used: Optional[str] = None
     ) -> dict:
-        """새 마케팅 초안 생성"""
-        if draft_type not in ["email", "comment"]:
-            raise ValueError("draft_type must be 'email' or 'comment'")
-        
+        """이메일 초안 생성"""
         data = {
-            "draft_type": draft_type,
-            "content": content,
             "video_id": video_id,
-            "lead_id": lead_id,
-            "tone": tone,
-            "language": language,
-            "status": "pending"
+            "subject": subject,
+            "body": body,
+            "model_used": model_used,
+            "status": "draft",
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP
         }
         
-        # None 값 제거
-        data = {k: v for k, v in data.items() if v is not None}
+        doc_ref = self.drafts_ref.document()
+        doc_ref.set(data)
         
-        response = self.client.table("drafts").insert(data).execute()
-        return response.data[0] if response.data else {}
+        doc = doc_ref.get()
+        return {"id": doc.id, **doc.to_dict()}
     
-    def get_draft_by_id(self, draft_id: str) -> Optional[dict]:
-        """ID로 초안 조회"""
-        response = self.client.table("drafts").select("*").eq("id", draft_id).execute()
-        return response.data[0] if response.data else None
-    
-    def get_drafts_by_video(self, video_id: str) -> list[dict]:
+    def get_drafts_by_video_id(self, video_id: str) -> List[dict]:
         """특정 영상의 모든 초안 조회"""
-        response = self.client.table("drafts").select("*").eq("video_id", video_id).order("created_at", desc=True).execute()
-        return response.data or []
+        docs = self.drafts_ref.where('video_id', '==', video_id).stream()
+        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
     
-    def get_drafts_by_lead(self, lead_id: str) -> list[dict]:
-        """특정 리드의 모든 초안 조회"""
-        response = self.client.table("drafts").select("*").eq("lead_id", lead_id).order("created_at", desc=True).execute()
-        return response.data or []
-    
-    def get_all_drafts(
-        self,
-        draft_type: Optional[str] = None,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> list[dict]:
-        """모든 초안 조회 (필터 및 페이지네이션 지원)"""
-        query = self.client.table("drafts").select("*")
-        
-        if draft_type:
-            query = query.eq("draft_type", draft_type)
-        
-        if status:
-            query = query.eq("status", status)
-        
-        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
-        response = query.execute()
-        return response.data or []
-    
-    def get_pending_drafts(self, draft_type: Optional[str] = None) -> list[dict]:
-        """대기 중인 초안 조회"""
-        return self.get_all_drafts(draft_type=draft_type, status="pending")
-    
-    def get_pending_email_drafts_detailed(self) -> list[dict]:
-        """대기 중인 이메일 초안 상세 조회 (영상, 리드 정보 포함)"""
-        try:
-            response = self.client.table("drafts").select(
-                "*, videos(*), leads(*)"
-            ).eq("draft_type", "email").eq("status", "pending").order("created_at", desc=True).execute()
-            return response.data or []
-        except Exception as e:
-            print(f"Error fetching detailed drafts: {e}")
-            return []
-    
-    def update_draft(self, draft_id: str, **kwargs) -> Optional[dict]:
+    def update_draft(self, draft_id: str, **kwargs) -> dict:
         """초안 업데이트"""
-        response = self.client.table("drafts").update(kwargs).eq("id", draft_id).execute()
-        return response.data[0] if response.data else None
-    
-    def update_draft_status(self, draft_id: str, status: str) -> Optional[dict]:
-        """초안 상태 업데이트"""
-        if status not in ["pending", "approved", "sent", "rejected"]:
-            raise ValueError("Invalid status. Must be: pending, approved, sent, rejected")
-        return self.update_draft(draft_id, status=status)
-    
-    def update_draft_content(self, draft_id: str, content: str) -> Optional[dict]:
-        """초안 내용 업데이트"""
-        return self.update_draft(draft_id, content=content)
-    
-    def delete_draft(self, draft_id: str) -> bool:
-        """초안 삭제"""
-        response = self.client.table("drafts").delete().eq("id", draft_id).execute()
-        return len(response.data) > 0 if response.data else False
-    
-    # =========================================
-    # 통계 및 집계 함수
-    # =========================================
-    
-    def get_lead_stats(self) -> dict:
-        """리드 통계 조회"""
-        all_leads = self.client.table("leads").select("status").execute()
+        kwargs['updated_at'] = firestore.SERVER_TIMESTAMP
+        self.drafts_ref.document(draft_id).update(kwargs)
         
-        stats = {
-            "total": 0,
-            "new": 0,
-            "contacted": 0,
-            "responded": 0,
-            "converted": 0,
-            "rejected": 0
+        doc = self.drafts_ref.document(draft_id).get()
+        return {"id": doc.id, **doc.to_dict()}
+    
+    def get_all_drafts(self) -> List[dict]:
+        """모든 초안 조회"""
+        docs = self.drafts_ref.stream()
+        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    
+    # ==================== SETTINGS (앱 설정) ====================
+    
+    def get_setting(self, key: str) -> Optional[str]:
+        """설정 값 조회"""
+        doc = self.settings_ref.document(key).get()
+        if doc.exists:
+            return doc.to_dict().get("value")
+        return None
+    
+    def set_setting(self, key: str, value: str) -> None:
+        """설정 값 저장"""
+        data = {
+            "value": value,
+            "updated_at": firestore.SERVER_TIMESTAMP
         }
-        
-        if all_leads.data:
-            stats["total"] = len(all_leads.data)
-            for lead in all_leads.data:
-                status = lead.get("status", "new")
-                if status in stats:
-                    stats[status] += 1
-        
-        return stats
+        self.settings_ref.document(key).set(data, merge=True)
     
-    def get_draft_stats(self) -> dict:
-        """초안 통계 조회"""
-        all_drafts = self.client.table("drafts").select("draft_type, status").execute()
+    # ==================== STATISTICS ====================
+    
+    def get_stats(self) -> dict:
+        """DB 통계 조회"""
+        leads_count = len(list(self.leads_ref.stream()))
+        videos_count = len(list(self.videos_ref.stream()))
+        drafts_count = len(list(self.drafts_ref.stream()))
         
-        stats = {
-            "total": 0,
-            "email": {"total": 0, "pending": 0, "approved": 0, "sent": 0, "rejected": 0},
-            "comment": {"total": 0, "pending": 0, "approved": 0, "sent": 0, "rejected": 0}
+        # 이메일 있는 리드 수
+        leads_with_email = 0
+        for doc in self.leads_ref.stream():
+            if doc.to_dict().get("email"):
+                leads_with_email += 1
+        
+        return {
+            "리드": leads_count,
+            "이메일 수집": leads_with_email,
+            "영상": videos_count,
+            "댓글 초안": drafts_count
         }
-        
-        if all_drafts.data:
-            stats["total"] = len(all_drafts.data)
-            for draft in all_drafts.data:
-                dtype = draft.get("draft_type")
-                status = draft.get("status", "pending")
-                if dtype in stats:
-                    stats[dtype]["total"] += 1
-                    if status in stats[dtype]:
-                        stats[dtype][status] += 1
-        
-        return stats
-    
-    def get_video_count(self) -> int:
-        """총 영상 수 조회"""
-        response = self.client.table("videos").select("id", count="exact").execute()
-        return response.count or 0
-    
-    # =========================================
-    # 관계 조회 (JOIN)
-    # =========================================
-    
-    def get_video_with_lead(self, video_id: str) -> Optional[dict]:
-        """영상과 연결된 리드 정보 함께 조회"""
-        response = self.client.table("videos").select("*, leads(*)").eq("id", video_id).execute()
-        return response.data[0] if response.data else None
-    
-    def get_draft_with_details(self, draft_id: str) -> Optional[dict]:
-        """초안과 연결된 영상, 리드 정보 함께 조회"""
-        response = self.client.table("drafts").select("*, videos(*), leads(*)").eq("id", draft_id).execute()
-        return response.data[0] if response.data else None
-    
-    def get_lead_with_videos_and_drafts(self, lead_id: str) -> Optional[dict]:
-        """리드와 연결된 모든 영상, 초안 정보 조회"""
-        response = self.client.table("leads").select("*, videos(*), drafts(*)").eq("id", lead_id).execute()
-        return response.data[0] if response.data else None
-
-
-
-    # =========================================
-    # APP SETTINGS (설정 관리) CRUD
-    # =========================================
-    
-    def get_app_setting(self, key: str, default: str = "") -> str:
-        """설정 값 가져오기"""
-        try:
-            response = self.client.table("app_settings").select("value").eq("key", key).execute()
-            if response.data:
-                return response.data[0]["value"]
-        except Exception as e:
-            print(f"Error fetching setting {key}: {e}")
-        return default
-    
-    def set_app_setting(self, key: str, value: str) -> bool:
-        """설정 값 저장하기 (Upsert)"""
-        try:
-            data = {"key": key, "value": value}
-            self.client.table("app_settings").upsert(data, on_conflict="key").execute()
-            return True
-        except Exception as e:
-            print(f"Error saving setting {key}: {e}")
-            return False
-
-
-# 싱글톤 인스턴스
-db = Database()
-
-
-# =========================================
-# 테스트 및 유틸리티 함수
-# =========================================
-
-def test_connection() -> bool:
-    """데이터베이스 연결 테스트"""
-    try:
-        response = db.client.table("leads").select("id").limit(1).execute()
-        return True
-    except Exception as e:
-        print(f"Database connection failed: {e}")
-        return False
-
-
-if __name__ == "__main__":
-    # 연결 테스트
-    print("Testing database connection...")
-    if test_connection():
-        print("✅ Database connection successful!")
-        
-        # 통계 출력
-        print("\n📊 Current Stats:")
-        lead_stats = db.get_lead_stats()
-        print(f"  - Total Leads: {lead_stats['total']}")
-        
-        draft_stats = db.get_draft_stats()
-        print(f"  - Total Drafts: {draft_stats['total']}")
-        
-        video_count = db.get_video_count()
-        print(f"  - Total Videos: {video_count}")
-    else:
-        print("❌ Database connection failed!")
-        print("Please check your SUPABASE_URL and SUPABASE_KEY in .env file")
-

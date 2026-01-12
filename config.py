@@ -34,9 +34,8 @@ def get_secret(key: str, default: str = "") -> str:
 class Config:
     """앱 설정 클래스"""
     
-    # Supabase
-    SUPABASE_URL: str = get_secret("SUPABASE_URL")
-    SUPABASE_KEY: str = get_secret("SUPABASE_KEY")
+    # Firebase (replaced Supabase)
+    # firebase-key.json 파일로 인증 (환경 변수 불필요)
     
     # Google Gemini
     GEMINI_API_KEY: str = get_secret("GEMINI_API_KEY")
@@ -67,10 +66,7 @@ class Config:
         """필수 환경 변수 검증"""
         missing = []
         
-        if not cls.SUPABASE_URL:
-            missing.append("SUPABASE_URL")
-        if not cls.SUPABASE_KEY:
-            missing.append("SUPABASE_KEY")
+        # Firebase는 firebase-key.json 파일로 인증하므로 제외
         if not cls.GEMINI_API_KEY:
             missing.append("GEMINI_API_KEY")
         if not cls.YOUTUBE_API_KEY:
