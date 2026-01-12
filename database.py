@@ -319,11 +319,46 @@ class Database:
 
 
 # ==================== 싱글톤 인스턴스 ====================
-db = Database()
+try:
+    db = Database()
+except Exception as e:
+    # DB 연결 실패 시, 앱을 멈추고 안내 메시지 출력
+    import streamlit as st
+    
+    st.set_page_config(page_title="설정 오류", page_icon="⚠️")
+    
+    st.error("⚠️ 데이터베이스 연결 실패 (Firebase)")
+    
+    with st.expander("🔍 상세 에러 메시지", expanded=True):
+        st.write(f"Error details: {str(e)}")
+    
+    st.info("👇 **해결 방법: Streamlit Secrets 설정을 확인해주세요**")
+    
+    st.markdown("""
+    **Streamlit Cloud 대시보드 -> App Settings -> Secrets** 탭에 아래 형식이 맞는지 확인하세요:
+    
+    ```toml
+    [firebase]
+    type = "service_account"
+    project_id = "..."
+    private_key_id = "..."
+    private_key = "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
+    client_email = "..."
+    client_id = "..."
+    ...
+    
+    YOUTUBE_API_KEY = "..."
+    GEMINI_API_KEY = "..."
+    ```
+    
+    **주의:** `private_key` 값에 줄바꿈(`\\n`)이 정확히 포함되어 있어야 합니다. JSON 파일 내용을 복사할 때 주의하세요.
+    """)
+    st.stop()
 
 # test_connection 함수 (하위 호환성 유지)
 def test_connection():
     """Firebase 연결 테스트 (레거시 호환)"""
+    if not db: return False
     try:
         db.db.collection('_health_check').document('test').set({'status': 'ok'})
         return True
