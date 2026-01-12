@@ -26,7 +26,7 @@ import time
 import pandas as pd
 
 from config import config
-from database import db, test_connection
+from database import db
 from logic import hunter, copywriter, AICopywriter
 
 # =============================================
