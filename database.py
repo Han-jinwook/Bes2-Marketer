@@ -21,19 +21,27 @@ class Database:
                 import streamlit as st
                 cred = None
                 
-                # 1-1. [firebase] 섹션 확인
+                # 1-1. [firebase] 섹션 (TOML 형식)
                 if hasattr(st, 'secrets') and 'firebase' in st.secrets:
                     firebase_creds = dict(st.secrets['firebase'])
                     cred = credentials.Certificate(firebase_creds)
                     print("✅ Firebase initialized from [firebase] section")
                 
-                # 1-2. Root Level Secrets 확인
+                # [NEW] 1-2. FIREBASE_KEY_JSON (JSON 문자열 통째로) - 가장 쉬운 방법
+                elif hasattr(st, 'secrets') and 'FIREBASE_KEY_JSON' in st.secrets:
+                    import json
+                    json_str = st.secrets['FIREBASE_KEY_JSON']
+                    firebase_creds = json.loads(json_str)
+                    cred = credentials.Certificate(firebase_creds)
+                    print("✅ Firebase initialized from FIREBASE_KEY_JSON string")
+
+                # 1-3. Root Level Secrets (JSON 내용이 풀려있는 경우)
                 elif hasattr(st, 'secrets') and 'project_id' in st.secrets and 'private_key' in st.secrets:
                     firebase_creds = dict(st.secrets)
                     cred = credentials.Certificate(firebase_creds)
                     print("✅ Firebase initialized from root secrets")
                 
-                # [NEW] 키가 없거나 형식이 안 맞는 경우 고의로 에러 발생 (디버깅용)
+                # 키가 없거나 형식이 안 맞는 경우 디버깅
                 else:
                     available_keys = list(st.secrets.keys()) if hasattr(st, 'secrets') else "None"
                     raise ValueError(f"키를 찾을 수 없습니다. 현재 인식된 키 목록: {available_keys}")
