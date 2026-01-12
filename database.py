@@ -280,6 +280,16 @@ class Database:
         except Exception as e:
             print(f"Error getting detailed drafts: {e}")
             return []
+
+    def get_drafts_by_video(self, video_id: str) -> List[dict]:
+        """특정 영상의 초안 조회"""
+        try:
+            docs = self.drafts_ref.where('video_id', '==', video_id).stream()
+            return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+        except Exception as e:
+            print(f"Error getting drafts for video {video_id}: {e}")
+            return []
+
     
     def get_all_videos(self) -> List[dict]:
         """모든 영상 조회 (lead 정보 포함)"""
