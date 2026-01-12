@@ -14,6 +14,7 @@ class Database:
     
     def __init__(self):
         """Firebase 초기화 (로컬 및 Streamlit Cloud 지원)"""
+        secret_error = None
         if not firebase_admin._apps:
             # 1. Streamlit Cloud에서 실행 중인 경우 (st.secrets 사용)
             try:
@@ -38,7 +39,7 @@ class Database:
                     return
             except Exception as e:
                 print(f"Streamlit Secrets failed, trying local file... ({e})")
-
+                secret_error = e
 
             
             # 2. 로컬 개발 환경 (firebase-key.json 사용)
@@ -49,7 +50,18 @@ class Database:
                     firebase_admin.initialize_app(cred)
                     print("✅ Firebase initialized from local JSON file")
                 else:
-                    raise FileNotFoundError("firebase-key.json not found")
+                    # 상세 에러 메시지 구성
+                    error_msg = "firebase-key.json not found (Local)"
+                    if secret_error:
+                        error_msg += f"\n\n[Secrets Load Error]: {secret_error}"
+                        try:
+                            import streamlit as st
+                            if hasattr(st, 'secrets'):
+                                error_msg += f"\n[Available Secrets Keys]: {list(st.secrets.keys())}"
+                        except:
+                            pass
+                    
+                    raise FileNotFoundError(error_msg)
             except Exception as e:
                 print(f"❌ Firebase initialization failed: {e}")
                 raise
