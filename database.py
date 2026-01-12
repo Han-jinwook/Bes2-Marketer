@@ -304,3 +304,17 @@ class Database:
             "영상": videos_count,
             "댓글 초안": drafts_count
         }
+
+
+# ==================== 싱글톤 인스턴스 ====================
+db = Database()
+
+# test_connection 함수 (하위 호환성 유지)
+def test_connection():
+    """Firebase 연결 테스트 (레거시 호환)"""
+    try:
+        db.db.collection('_health_check').document('test').set({'status': 'ok'})
+        return True
+    except Exception as e:
+        print(f"Firebase connection test failed: {e}")
+        return False
