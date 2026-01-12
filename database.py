@@ -48,8 +48,8 @@ class Database:
                 
                 if cred:
                     firebase_admin.initialize_app(cred)
-                    self.db = firestore.client()
-                    return
+                    print("✅ Firebase initialized successfully")
+
             except Exception as e:
                 print(f"Streamlit Secrets failed, trying local file... ({e})")
                 secret_error = e
@@ -79,13 +79,18 @@ class Database:
                 print(f"❌ Firebase initialization failed: {e}")
                 raise
         
-        self.db = firestore.client()
-        
-        # 컬렉션 참조
-        self.leads_ref = self.db.collection('leads')
-        self.videos_ref = self.db.collection('videos')
-        self.drafts_ref = self.db.collection('drafts')
-        self.settings_ref = self.db.collection('settings')
+        # Firestore 클라이언트 및 참조 초기화 (항상 실행)
+        try:
+            self.db = firestore.client()
+            
+            # 컬렉션 참조
+            self.leads_ref = self.db.collection('leads')
+            self.videos_ref = self.db.collection('videos')
+            self.drafts_ref = self.db.collection('drafts')
+            self.settings_ref = self.db.collection('settings')
+        except Exception as e:
+            print(f"Failed to initialize Firestore client: {e}")
+            raise
     
     # ==================== LEADS (채널 정보) ====================
     
