@@ -325,7 +325,7 @@ except Exception as e:
     # DB 연결 실패 시, 앱을 멈추고 안내 메시지 출력
     import streamlit as st
     
-    st.set_page_config(page_title="설정 오류", page_icon="⚠️")
+    # st.set_page_config 삭제 (main.py와 충돌 방지)
     
     st.error("⚠️ 데이터베이스 연결 실패 (Firebase)")
     
