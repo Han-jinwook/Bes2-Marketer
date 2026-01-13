@@ -282,11 +282,13 @@ with st.sidebar:
         require_email = False  # 이메일 유무와 관계없이 모든 영상 수집
     
     # [NEW] 최소 조회수 설정 (품질 필터)
-    min_view_count = st.select_slider(
+    min_view_count = st.number_input(
         "최소 조회수 (품질 필터)",
-        options=[0, 100, 500, 1000, 5000, 10000],
-        value=0,  # [FIX] 기본값 0으로 변경 (모든 영상 수집)
-        help="이 조회수 미만인 영상은 수집하지 않습니다."
+        min_value=0,
+        max_value=100000,
+        value=10000,  # 기본값: 1만 조회수
+        step=1000,
+        help="이 조회수 미만인 영상은 수집하지 않습니다. (0이면 모든 영상 수집)"
     )
 
     st.markdown("---")
