@@ -368,65 +368,45 @@ class YouTubeHunter:
         languages: list[str] = ["ko", "en"]
     ) -> Optional[str]:
         """
-        영상 자막 추출 (최대한 강력하게 - Raw 모드)
+        영상 자막 추출 (과거 작동했던 방식 복원)
         """
         try:
             print(f"[Transcript] Fetching for {video_id}...")
             
             # 1. 자막 목록 가져오기
-            # (cookies.txt가 있으면 사용하여 IP 차단/연령 제한 우회)
-            import os
-            cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
-            
             try:
-                if os.path.exists(cookies_path):
-                    print(f"   🍪 Using cookies from {cookies_path}")
-                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
-                else:
-                    print("   ℹ️ No cookies found, trying without...")
-                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             except Exception as list_error:
                 print(f"   ❌ Failed to list transcripts: {list_error}")
                 return None
 
-            # 2. 우선적으로 수동 생성 자막 찾기
             transcript = None
+
+            # 2. 우선순위 언어 시도 (한국어->영어)
             try:
-                transcript = transcript_list.find_manually_created_transcript(languages)
-                print(f"   ✅ Found Manual Transcript in {languages}")
-            except NoTranscriptFound:
-                # 없으면 자동 생성 자막 찾기
+                # find_transcript()는 수동/자동 구분 없이 해당 언어를 찾음
+                transcript = transcript_list.find_transcript(languages)
+                print(f"   ✅ Found transcript in {languages}")
+            except:
+                # 3. 실패하면 아무 자막이나 하나 가져오기 (Fallback)
                 try:
-                    print(f"   ⚠️ No Manual transcript, trying Auto-generated in {languages}...")
-                    transcript = transcript_list.find_generated_transcript(languages)
-                    print(f"   ✅ Found Auto-generated Transcript in {languages}")
-                except NoTranscriptFound:
-                    # languages에 없으면, 사용 가능한 모든 자막 중 첫 번째 시도
-                    print(f"   ⚠️ No transcript in {languages}, trying any available language...")
-                    try:
-                        available = list(transcript_list)
-                        if available:
-                            transcript = available[0]
-                            print(f"   ✅ Found transcript in language: {transcript.language_code}")
-                        else:
-                            print("   ❌ No transcripts available at all for this video")
-                            return None
-                    except Exception as any_error:
-                        print(f"   ❌ Failed to get any transcript: {any_error}")
-                        return None
-            
-            # 3. 자막 가져오기
+                    # 목록의 첫 번째 자막 (보통 자동생성됨)
+                    transcript = next(iter(transcript_list))
+                    print(f"   ✅ Found fallback transcript: {transcript.language_code}")
+                except:
+                    print("   ❌ No transcripts available")
+                    pass
+  
             if transcript:
-                script = transcript.fetch()
-                
-                # 텍스트만 합치기
-                full_text = " ".join([entry['text'] for entry in script])
+                # 자막 텍스트 추출
+                transcript_data = transcript.fetch()
+                full_text = " ".join([entry["text"] for entry in transcript_data])
                 print(f"   ✅ Transcript extracted successfully ({len(full_text)} characters)")
                 return full_text
             else:
                 print("   ❌ No transcript object available")
                 return None
-            
+
         except TranscriptsDisabled:
             print(f"   ❌ Transcripts are DISABLED for video {video_id}")
             return None
