@@ -64,6 +64,9 @@ class YouTubeHunter:
             "skipped_no_email": 0
         }
         
+        # [FIX] 채널 이메일 캐시 (중복 스캔 방지)
+        self._channel_email_cache = {}
+        
         # 2. 1차 검색 (최대 10페이지 = 500개 후보군 탐색)
         for page_num in range(10):
             try:
@@ -213,11 +216,17 @@ class YouTubeHunter:
                                 email = existing_lead["email"]
 
                         # [NEW] 4. Deep Scan (최신 영상 5개 뒤지기)
-                        # 이메일이 여전히 없고, require_email 옵션이 켜져 있거나, 사용자가 수동으로 원할 때
-                        # 여기서는 일단 항상 시도 (Found a hidden gem strategy)
+                        # 캐시 확인 → 같은 채널은 한 번만 스캔
                         if not email:
-                            print(f"Deep scanning channel {cid} for email...")
-                            email = self._deep_scan_email(cid)
+                            if cid in self._channel_email_cache:
+                                email = self._channel_email_cache[cid]
+                                if email:
+                                    print(f"   ✅ Found cached email for channel {cid}")
+                            else:
+                                print(f"Deep scanning channel {cid} for email...")
+                                email = self._deep_scan_email(cid)
+                                # 캐시 저장 (None이어도 저장해서 재시도 방지)
+                                self._channel_email_cache[cid] = email
 
                             
                             
@@ -232,6 +241,7 @@ class YouTubeHunter:
                             "email": email
                         }
                         final_items.append(v)
+
             
             except Exception as e:
                 print(f"Detail API Error: {e}")
