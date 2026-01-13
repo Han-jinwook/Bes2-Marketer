@@ -762,19 +762,26 @@ with tab1:
                                     for ed in existing_drafts:
                                         db.delete_draft(ed["id"])
 
-                                email_draft = db.create_draft(
-                                    draft_type="email",
-                                    content=email,
+                                # 이메일 초안 저장
+                                email_draft = db.save_draft(
                                     video_id=video_db_id,
+                                    channel_name=video["channel_name"],
+                                    video_title=video["title"],
+                                    draft_content=email,
+                                    status='generated',
+                                    email=(video.get("channel_info") or {}).get("email"),
                                     lead_id=lead_id
                                 )
                                 if not email_draft:
                                     raise Exception("Email Draft DB Save Failed")
 
-                                db.create_draft(
-                                    draft_type="comment",
-                                    content=comment,
+                                # 댓글 초안 저장
+                                db.save_draft(
                                     video_id=video_db_id,
+                                    channel_name=video["channel_name"],
+                                    video_title=f"[댓글] {video['title']}",
+                                    draft_content=comment,
+                                    status='generated',
                                     lead_id=lead_id
                                 )
                                 
