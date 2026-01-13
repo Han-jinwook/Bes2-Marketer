@@ -425,12 +425,38 @@ class Database:
         doc = self.drafts_ref.document(draft_id).get()
         return {"id": doc.id, **doc.to_dict()}
     
-    def get_all_drafts(self) -> List[dict]:
-        """모든 초안 조회"""
-        docs = self.drafts_ref.stream()
-        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    def get_all_drafts(self, draft_type: Optional[str] = None, limit: int = 50) -> List[dict]:
+        """모든 초안 조회 (optional 필터: draft_type)"""
+        try:
+            query = self.drafts_ref
+            
+            # draft_type 필터 적용 (있으면)
+            if draft_type:
+                query = query.where('draft_type', '==', draft_type)
+            
+            # limit 적용
+            docs = query.limit(limit).stream()
+            
+            result = []
+            for doc in docs:
+                draft_data = {"id": doc.id, **doc.to_dict()}
+                
+                # Firestore timestamp를 문자열로 변환
+                if 'created_at' in draft_data and draft_data['created_at']:
+                    try:
+                        draft_data['created_at'] = draft_data['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        draft_data['created_at'] = str(draft_data['created_at'])
+                
+                result.append(draft_data)
+            
+            return result
+        except Exception as e:
+            print(f"Error getting all drafts: {e}")
+            return []
     
-    # ==================== SETTINGS (앱 설정) ====================
+    # ==================== SETTINGS (설정) ====================
+
     
     def get_setting(self, key: str) -> Optional[str]:
         """설정 값 조회"""
