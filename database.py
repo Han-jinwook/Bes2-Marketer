@@ -382,15 +382,26 @@ class Database:
         video_id: str,
         subject: str,
         body: str,
-        model_used: Optional[str] = None
+        model_used: Optional[str] = None,
+        draft_type: str = 'initial',
+        channel_name: Optional[str] = None,
+        video_title: Optional[str] = None,
+        lead_id: Optional[str] = None,
+        email: Optional[str] = None
     ) -> dict:
         """이메일 초안 생성"""
         data = {
             "video_id": video_id,
             "subject": subject,
+            "draft_content": body, # 일관성을 위해 body -> draft_content로 매핑하거나 통일 필요. 여기선 body를 저장
             "body": body,
             "model_used": model_used,
-            "status": "draft",
+            "draft_type": draft_type,
+            "status": "generated",
+            "channel_name": channel_name,
+            "video_title": video_title,
+            "lead_id": lead_id,
+            "email": email,
             "created_at": firestore.SERVER_TIMESTAMP,
             "updated_at": firestore.SERVER_TIMESTAMP
         }
