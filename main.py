@@ -4,6 +4,7 @@ AI 기반 유튜브 마케팅 자동화 대시보드
 """
 
 # Force Update: Fix KeyError Cache
+# Version: 2026-01-13-22:15 (Force Reboot)
 import streamlit as st
 import pandas as pd
 import time
