@@ -147,6 +147,14 @@ class Database:
     
     # ==================== VIDEOS (영상 정보) ====================
     
+    def update_video(self, video_id: str, **kwargs) -> dict:
+        """영상 정보 업데이트"""
+        kwargs['updated_at'] = firestore.SERVER_TIMESTAMP
+        self.videos_ref.document(video_id).update(kwargs)
+        
+        doc = self.videos_ref.document(video_id).get()
+        return {"id": doc.id, **doc.to_dict()}
+
     def create_video(
         self,
         video_id: str,
