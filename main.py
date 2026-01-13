@@ -695,19 +695,37 @@ with tab1:
                                     if len(content) < 10:
                                         content += " (내용 부족)"
 
-                                # 2. AI 생성 (이메일, 댓글, 요약)
-                                email = copywriter.generate_email(
-                                    channel_name=video["channel_name"],
-                                    video_title=video["title"],
-                                    video_content=content,
-                                    subscriber_count=(video.get("channel_info") or {}).get("subscriber_count", 0)
-                                )
-                                comment = copywriter.generate_comment(
-                                    channel_name=video["channel_name"],
-                                    video_title=video["title"],
-                                    video_content=content
-                                )
-                                summary = copywriter.summarize_video(content)
+                                # 2. AI 생성 (이메일, 댓글, 요약) with validation
+                                try:
+                                    email = copywriter.generate_email(
+                                        channel_name=video["channel_name"],
+                                        video_title=video["title"],
+                                        video_content=content,
+                                        subscriber_count=(video.get("channel_info") or {}).get("subscriber_count", 0)
+                                    )
+                                    if not email or len(email) < 10:
+                                        raise ValueError("Email generation failed or too short")
+                                        
+                                    comment = copywriter.generate_comment(
+                                        channel_name=video["channel_name"],
+                                        video_title=video["title"],
+                                        video_content=content
+                                    )
+                                    if not comment:
+                                        comment = "댓글 생성 실패"
+                                        
+                                    summary = copywriter.summarize_video(content)
+                                    if not summary:
+                                        summary = content[:200] + "..."
+                                        
+                                except Exception as ai_error:
+                                    print(f"AI generation error for {vid}: {ai_error}")
+                                    status_area.error(f"❌ AI 생성 실패: {ai_error}")
+                                    # AI 실패 시 기본값 사용
+                                    email = f"안녕하세요, {video['channel_name']}님!\n\n영상 '{video['title']}'를 잘 봤습니다.\n\n(자동 생성 실패 - 수동 작성 필요)"
+                                    comment = "좋은 영상 감사합니다!"
+                                    summary = content[:200] if content else "요약 없음"
+                                
                                 relevance = {"score": 100} # 기본값
                                 
                                 # 3. DB 저장/업데이트
@@ -800,8 +818,12 @@ with tab1:
                                 success_count += 1
                                 
                         except Exception as e:
+                            import traceback
+                            error_detail = traceback.format_exc()
                             print(f"Error processing {vid}: {e}")
-                            st.error(f"❌ 오류 상세: {e}")
+                            print(error_detail)
+                            st.error(f"❌ '{v_title}' 처리 실패\n\n원인: {str(e)}\n\n상세 로그는 Streamlit Cloud 로그를 확인하세요.")
+
                             
                 status_area.empty()
                 if success_count > 0:
