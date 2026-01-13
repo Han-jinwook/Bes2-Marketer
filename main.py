@@ -900,7 +900,18 @@ with tab2:
                     else:
                         st.toast("⚠️ 이메일을 입력하세요.")
 
-                st.caption(f"작성일: {d.get('created_at', '')[:16]}")
+
+                # 작성일 표시 (Firestore datetime 안전 처리)
+                created_at = d.get('created_at', '')
+                if created_at:
+                    try:
+                        created_at_str = created_at.strftime('%Y-%m-%d %H:%M') if hasattr(created_at, 'strftime') else str(created_at)[:16]
+                    except:
+                        created_at_str = str(created_at)[:16]
+                else:
+                    created_at_str = "Unknown"
+                
+                st.caption(f"작성일: {created_at_str}")
                 st.markdown("---")
                 
                 # 본문 에디터
