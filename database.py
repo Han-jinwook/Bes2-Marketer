@@ -345,23 +345,27 @@ class Database:
         except Exception:
             return None
             
-    def get_all_videos(self) -> List[dict]:
-        """모든 영상 조회 (lead 정보 포함)"""
-        docs = self.videos_ref.stream()
-        videos = []
-        
-        for doc in docs:
-            video_data = {"id": doc.id, **doc.to_dict()}
+    def get_all_videos(self, limit: int = 50) -> List[dict]:
+        """모든 영상 조회 (최신순)"""
+        try:
+            # 최신순 정렬 및 limit 적용
+            # (Note: 복합 인덱스가 필요할 수 있음. 에러 발생 시 콘솔 로그의 링크 클릭 필요)
+            docs = self.videos_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).stream()
             
-            # Lead 정보 조인
-            if "lead_id" in video_data:
-                lead_doc = self.leads_ref.document(video_data["lead_id"]).get()
-                if lead_doc.exists:
-                    video_data["lead"] = lead_doc.to_dict()
+            videos = []
+            for doc in docs:
+                video_data = {"id": doc.id, **doc.to_dict()}
+                videos.append(video_data)
             
-            videos.append(video_data)
-        
-        return videos
+            return videos
+        except Exception as e:
+            # 인덱스 에러 등의 경우, 기본 쿼리로 재시도
+            print(f"Ordered query failed (might need index): {e}")
+            try:
+                docs = self.videos_ref.limit(limit).stream()
+                return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+            except:
+                return []
     
     # ==================== DRAFTS (이메일 초안) ====================
     
