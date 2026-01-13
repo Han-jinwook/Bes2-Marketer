@@ -254,7 +254,7 @@ with st.sidebar:
     selected_strategy_name = st.radio(
         "작전명",
         list(strategy_options.keys()),
-        index=2, # 기본값: 라이징 스타
+        index=3, # 기본값: 데일리 루틴
         help="원하는 타겟 시기에 맞춰 자동으로 설정이 변경됩니다."
     )
     
@@ -286,8 +286,8 @@ with st.sidebar:
         "최소 조회수 (품질 필터)",
         min_value=0,
         max_value=100000,
-        value=10000,  # 기본값: 1만 조회수
-        step=1000,
+        value=100,  # 기본값: 100 조회수
+        step=100,
         help="이 조회수 미만인 영상은 수집하지 않습니다. (0이면 모든 영상 수집)"
     )
 
@@ -498,9 +498,14 @@ with tab1:
             # 이메일 표시 (DB 우선 -> 수집된 것 -> 빈 값)
             email_addr = v.get("channel_info", {}).get("email", "")
             
+            # 자막 추출 여부 확인
+            has_transcript = bool(v.get("transcript_text") and len(v.get("transcript_text", "")) > 100)
+            transcript_status = "✅" if has_transcript else "❌"
+            
             video_data.append({
                 "선택": selected,
                 "제목": v.get("title", "No Title"),
+                "자막": transcript_status,  # [NEW] 자막 추출 여부
                 "이메일": email_addr, # [NEW] 직접 편집 가능
                 "채널명": v.get("channel_name", "Unknown"),
                 "게시일": v.get("published_at", "")[:10] if v.get("published_at") else "",
@@ -520,6 +525,7 @@ with tab1:
             df_videos,
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", width="small", default=True),
+                "자막": st.column_config.TextColumn("자막", width="small", help="자막 추출 성공 여부"),
                 "이메일": st.column_config.TextColumn("이메일", width="medium", help="클릭해서 이메일을 입력하세요."),
                 "제목": st.column_config.TextColumn("제목", width="large"),
                 "채널명": st.column_config.TextColumn("채널명", width="medium"),
