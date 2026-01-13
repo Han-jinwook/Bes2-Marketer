@@ -368,38 +368,65 @@ class YouTubeHunter:
             import os
             cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
             
-            if os.path.exists(cookies_path):
-                print(f"   🍪 Using cookies from {cookies_path}")
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
-            else:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            try:
+                if os.path.exists(cookies_path):
+                    print(f"   🍪 Using cookies from {cookies_path}")
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
+                else:
+                    print("   ℹ️ No cookies found, trying without...")
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            except Exception as list_error:
+                print(f"   ❌ Failed to list transcripts: {list_error}")
+                return None
 
             # 2. 우선적으로 수동 생성 자막 찾기
+            transcript = None
             try:
                 transcript = transcript_list.find_manually_created_transcript(languages)
-                print("   ✅ Found Manual Transcript")
+                print(f"   ✅ Found Manual Transcript in {languages}")
             except NoTranscriptFound:
                 # 없으면 자동 생성 자막 찾기
                 try:
-                    print("   ⚠️ No Manual, trying Auto-generated...")
+                    print(f"   ⚠️ No Manual transcript, trying Auto-generated in {languages}...")
                     transcript = transcript_list.find_generated_transcript(languages)
-                    print("   ✅ Found Auto-generated Transcript")
+                    print(f"   ✅ Found Auto-generated Transcript in {languages}")
                 except NoTranscriptFound:
-                    print("   ❌ No transcript found in requested languages.")
-                    return None
+                    # languages에 없으면, 사용 가능한 모든 자막 중 첫 번째 시도
+                    print(f"   ⚠️ No transcript in {languages}, trying any available language...")
+                    try:
+                        available = list(transcript_list)
+                        if available:
+                            transcript = available[0]
+                            print(f"   ✅ Found transcript in language: {transcript.language_code}")
+                        else:
+                            print("   ❌ No transcripts available at all for this video")
+                            return None
+                    except Exception as any_error:
+                        print(f"   ❌ Failed to get any transcript: {any_error}")
+                        return None
             
             # 3. 자막 가져오기
-            script = transcript.fetch()
-            
-            # 텍스트만 합치기
-            full_text = " ".join([entry['text'] for entry in script])
-            return full_text
+            if transcript:
+                script = transcript.fetch()
+                
+                # 텍스트만 합치기
+                full_text = " ".join([entry['text'] for entry in script])
+                print(f"   ✅ Transcript extracted successfully ({len(full_text)} characters)")
+                return full_text
+            else:
+                print("   ❌ No transcript object available")
+                return None
             
         except TranscriptsDisabled:
-            print(f"   ❌ Transcripts are disabled for video {video_id}")
+            print(f"   ❌ Transcripts are DISABLED for video {video_id}")
+            return None
+        except VideoUnavailable:
+            print(f"   ❌ Video {video_id} is UNAVAILABLE")
             return None
         except Exception as e:
-            print(f"   ❌ Error fetching transcript: {e}")
+            import traceback
+            print(f"   ❌ Unexpected error fetching transcript: {e}")
+            print(traceback.format_exc())
             return None
 
 
