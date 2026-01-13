@@ -41,44 +41,59 @@ class Database:
                     cred = credentials.Certificate(firebase_creds)
                     print("✅ Firebase initialized from root secrets")
                 
-                # 키가 없거나 형식이 안 맞는 경우 (로컬 파일로 폴백 시도)
+                # 키가 없거나 형식이 안 맞는 경우
                 else:
-                    available_keys = list(st.secrets.keys()) if hasattr(st, 'secrets') else "None"
+                    available_keys = list(st.secrets.keys()) if hasattr(st, 'secrets') else []
                     print(f"⚠️ No Firebase keys found in Secrets. Available: {available_keys}")
+                    
+                    # Streamlit Cloud인 경우 명확한 에러 표시
+                    if hasattr(st, 'secrets'):
+                        st.error("""
+                        🚨 **Firebase Secrets 설정이 필요합니다!**
+                        
+                        Streamlit Cloud 대시보드 → App Settings → Secrets에서 다음을 추가하세요:
+                        
+                        ```toml
+                        FIREBASE_KEY_JSON = '{"type": "service_account", "project_id": "...", ...}'
+                        ```
+                        
+                        또는 Firebase 콘솔에서 다운로드한 JSON 파일 내용을 통째로 넣으세요.
+                        """)
                     cred = None  # 로컬 파일로 폴백
                 
                 if cred:
                     firebase_admin.initialize_app(cred)
-                    print("✅ Firebase initialized successfully")
+                    print("✅ Firebase initialized successfully from Streamlit Secrets")
 
             except Exception as e:
-                print(f"Streamlit Secrets failed, trying local file... ({e})")
+                print(f"⚠️ Streamlit Secrets loading failed: {e}")
                 secret_error = e
 
             
             # 2. 로컬 개발 환경 (firebase-key.json 사용)
-            try:
-                cred_path = os.path.join(os.path.dirname(__file__), 'firebase-key.json')
-                if os.path.exists(cred_path):
-                    cred = credentials.Certificate(cred_path)
-                    firebase_admin.initialize_app(cred)
-                    print("✅ Firebase initialized from local JSON file")
-                else:
-                    # 상세 에러 메시지 구성
-                    error_msg = "firebase-key.json not found (Local)"
-                    if secret_error:
-                        error_msg += f"\n\n[Secrets Load Error]: {secret_error}"
-                        try:
-                            import streamlit as st
-                            if hasattr(st, 'secrets'):
-                                error_msg += f"\n[Available Secrets Keys]: {list(st.secrets.keys())}"
-                        except:
-                            pass
-                    
-                    raise FileNotFoundError(error_msg)
-            except Exception as e:
-                print(f"❌ Firebase initialization failed: {e}")
-                raise
+            if not firebase_admin._apps:
+                try:
+                    cred_path = os.path.join(os.path.dirname(__file__), 'firebase-key.json')
+                    if os.path.exists(cred_path):
+                        cred = credentials.Certificate(cred_path)
+                        firebase_admin.initialize_app(cred)
+                        print("✅ Firebase initialized from local JSON file")
+                    else:
+                        # 상세 에러 메시지 구성
+                        error_msg = "firebase-key.json not found (Local)"
+                        if secret_error:
+                            error_msg += f"\n\n[Secrets Load Error]: {secret_error}"
+                            try:
+                                import streamlit as st
+                                if hasattr(st, 'secrets'):
+                                    error_msg += f"\n[Available Secrets Keys]: {list(st.secrets.keys())}"
+                            except:
+                                pass
+                        
+                        raise FileNotFoundError(error_msg)
+                except Exception as e:
+                    print(f"❌ Firebase initialization failed: {e}")
+                    raise
         
         # Firestore 클라이언트 및 참조 초기화 (항상 실행)
         try:
