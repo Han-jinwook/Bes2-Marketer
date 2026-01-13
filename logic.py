@@ -368,47 +368,78 @@ class YouTubeHunter:
         languages: list[str] = ["ko", "en"]
     ) -> Optional[str]:
         """
-        영상 자막 추출 (IP 차단 우회 포함)
-        Method 1: youtube-transcript-api (빠름)
+        영상 자막 추출 (IP 차단 우회 강화)
+        Method 1: youtube-transcript-api (User-Agent 스푸핑)
         Method 2: yt-dlp (IP 차단 우회, 느림)
         """
-        # Method 1: youtube-transcript-api (기본)
-        try:
-            print(f"[Transcript] Method 1: youtube-transcript-api for {video_id}...")
-            
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = None
-
-            # 우선순위 언어 시도
+        import time
+        import random
+        
+        # 봇 차단 우회용 User-Agent
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        
+        # Method 1: youtube-transcript-api (User-Agent 스푸핑)
+        for attempt in range(2):  # 2번 재시도
             try:
-                transcript = transcript_list.find_transcript(languages)
-                print(f"   ✅ Found transcript in {languages}")
-            except:
-                # Fallback: 아무 언어나
+                print(f"[Transcript] Method 1 (Attempt {attempt + 1}): youtube-transcript-api for {video_id}...")
+                
+                # Rate limiting (너무 빠른 요청 방지)
+                if attempt > 0:
+                    delay = random.uniform(1, 3)
+                    print(f"   ⏳ Waiting {delay:.1f}s before retry...")
+                    time.sleep(delay)
+                
+                # User-Agent 스푸핑으로 봇 차단 우회
+                import requests
+                session = requests.Session()
+                session.headers.update({'User-Agent': random.choice(user_agents)})
+                
+                # youtube-transcript-api는 내부적으로 requests 사용하지 않아서 우회 어려움
+                # 직접 API 호출로 변경
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript = None
+
+                # 우선순위 언어 시도
                 try:
-                    transcript = next(iter(transcript_list))
-                    print(f"   ✅ Found fallback transcript: {transcript.language_code}")
+                    transcript = transcript_list.find_transcript(languages)
+                    print(f"   ✅ Found transcript in {languages}")
                 except:
-                    print("   ❌ No transcripts via youtube-transcript-api")
-                    pass
+                    # Fallback: 아무 언어나
+                    try:
+                        transcript = next(iter(transcript_list))
+                        print(f"   ✅ Found fallback transcript: {transcript.language_code}")
+                    except:
+                        print("   ❌ No transcripts via youtube-transcript-api")
+                        continue
   
-            if transcript:
-                transcript_data = transcript.fetch()
-                full_text = " ".join([entry["text"] for entry in transcript_data])
-                print(f"   ✅ Transcript extracted ({len(full_text)} chars)")
-                return full_text
+                if transcript:
+                    transcript_data = transcript.fetch()
+                    full_text = " ".join([entry["text"] for entry in transcript_data])
+                    print(f"   ✅ Transcript extracted ({len(full_text)} chars)")
+                    return full_text
 
-        except TranscriptsDisabled:
-            print(f"   ❌ Transcripts DISABLED")
-        except VideoUnavailable:
-            print(f"   ❌ Video UNAVAILABLE")
-        except Exception as e:
-            print(f"   ⚠️ Method 1 failed: {e}")
+            except TranscriptsDisabled:
+                print(f"   ❌ Transcripts DISABLED")
+                break  # 재시도 불필요
+            except VideoUnavailable:
+                print(f"   ❌ Video UNAVAILABLE")
+                break
+            except Exception as e:
+                print(f"   ⚠️ Method 1 Attempt {attempt + 1} failed: {e}")
+                if attempt == 1:  # 마지막 시도
+                    print(f"   → Moving to Method 2...")
 
-        # Method 2: yt-dlp (IP 차단 우회)
+        # Method 2: yt-dlp (IP 차단 우회 + User-Agent)
         try:
             print(f"[Transcript] Method 2: yt-dlp (IP bypass) for {video_id}...")
             import yt_dlp
+            
+            # Rate limiting
+            time.sleep(random.uniform(0.5, 1.5))
             
             ydl_opts = {
                 'skip_download': True,
@@ -417,6 +448,7 @@ class YouTubeHunter:
                 'subtitleslangs': languages,
                 'quiet': True,
                 'no_warnings': True,
+                'user_agent': random.choice(user_agents),  # User-Agent 스푸핑
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -429,9 +461,8 @@ class YouTubeHunter:
                         if lang in info['subtitles']:
                             subtitle_url = info['subtitles'][lang][0]['url']
                             import requests
-                            response = requests.get(subtitle_url)
+                            response = requests.get(subtitle_url, headers={'User-Agent': random.choice(user_agents)})
                             if response.status_code == 200:
-                                # VTT/SRT 파싱 (간단하게 텍스트만 추출)
                                 text = self._parse_subtitle_text(response.text)
                                 print(f"   ✅ yt-dlp extracted subtitle ({len(text)} chars)")
                                 return text
@@ -442,7 +473,7 @@ class YouTubeHunter:
                         if lang in info['automatic_captions']:
                             subtitle_url = info['automatic_captions'][lang][0]['url']
                             import requests
-                            response = requests.get(subtitle_url)
+                            response = requests.get(subtitle_url, headers={'User-Agent': random.choice(user_agents)})
                             if response.status_code == 200:
                                 text = self._parse_subtitle_text(response.text)
                                 print(f"   ✅ yt-dlp extracted auto-caption ({len(text)} chars)")
@@ -451,7 +482,7 @@ class YouTubeHunter:
         except Exception as e:
             print(f"   ❌ Method 2 (yt-dlp) failed: {e}")
             
-        print(f"   ❌ All methods failed for {video_id}")
+        print(f"   ❌ All methods failed for {video_id} (Possible IP block)")
         return None
     
     def _parse_subtitle_text(self, subtitle_content: str) -> str:
