@@ -335,48 +335,15 @@ class Database:
 
 
     
-    def save_draft(
-        self,
-        video_id: str,
-        channel_name: str,
-        video_title: str,
-        draft_content: str,
-        status: str = 'generated',
-        email: Optional[str] = None,
-        lead_id: Optional[str] = None
-    ) -> dict:
-        """이메일 초안 저장"""
+    def get_lead_by_id(self, lead_id: str) -> Optional[dict]:
+        """문서 ID로 리드 조회"""
         try:
-            data = {
-                "video_id": video_id,
-                "channel_name": channel_name,
-                "video_title": video_title,
-                "draft_content": draft_content,
-                "status": status,
-                "email": email,
-                "lead_id": lead_id,
-                "created_at": firestore.SERVER_TIMESTAMP,
-                "updated_at": firestore.SERVER_TIMESTAMP
-            }
-            
-            # 새 문서 생성
-            doc_ref = self.drafts_ref.document()
-            doc_ref.set(data)
-            
-            doc = doc_ref.get()
-            return {"id": doc.id, **doc.to_dict()}
-        except Exception as e:
-            print(f"Error saving draft: {e}")
-            raise e
-
-    def delete_draft(self, draft_id: str) -> bool:
-        """초안 삭제"""
-        try:
-            self.drafts_ref.document(draft_id).delete()
-            return True
-        except Exception as e:
-            print(f"Error deleting draft {draft_id}: {e}")
-            return False
+            doc = self.leads_ref.document(lead_id).get()
+            if doc.exists:
+                return {"id": doc.id, **doc.to_dict()}
+            return None
+        except Exception:
+            return None
             
     def get_all_videos(self) -> List[dict]:
         """모든 영상 조회 (lead 정보 포함)"""

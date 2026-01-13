@@ -434,20 +434,26 @@ with tab1:
             for v in db_videos:
                 lead = None
                 if v.get("lead_id"):
-                    lead = db.get_lead_by_id(v["lead_id"])
+                    # lead 정보가 없을 수도 있음 (삭제 등)
+                    try:
+                        lead = db.get_lead_by_id(v["lead_id"])
+                    except:
+                        lead = None
+                
+                # 안전하게 데이터 구성
                 videos_to_show.append({
-                    "video_id": v["video_id"],
-                    "title": v["title"],
-                    "channel_name": lead["channel_name"] if lead else "Unknown",
-                    "channel_id": lead["channel_id"] if lead else "",
+                    "video_id": v.get("video_id", ""),
+                    "title": v.get("title", "No Title"),
+                    "channel_name": lead["channel_name"] if lead else v.get("channel_name", "Unknown"), # DB에 없으면 video 데이터에서 시도
+                    "channel_id": lead["channel_id"] if lead else v.get("channel_id", ""),
                     "thumbnail_url": v.get("thumbnail_url", ""),
-                    "published_at": v.get("upload_date", ""), # [FIX] UI 호환용 이름표 추가
-                    "video_url": v.get("video_url", f"https://youtube.com/watch?v={v['video_id']}"),
+                    "published_at": v.get("upload_date", ""),
+                    "video_url": v.get("video_url", f"https://youtube.com/watch?v={v.get('video_id', '')}"),
                     "view_count": v.get("view_count", 0),
                     "transcript_text": v.get("transcript_text", ""),
                     "summary": v.get("summary", ""),
                     "relevance_score": v.get("relevance_score", 0),
-                    "db_id": v["id"],
+                    "db_id": v.get("id"),
                     "channel_info": {
                         "subscriber_count": lead.get("subscriber_count", 0) if lead else 0,
                         "email": lead.get("email") if lead else None
