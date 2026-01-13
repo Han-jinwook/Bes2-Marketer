@@ -41,10 +41,11 @@ class Database:
                     cred = credentials.Certificate(firebase_creds)
                     print("✅ Firebase initialized from root secrets")
                 
-                # 키가 없거나 형식이 안 맞는 경우 디버깅
+                # 키가 없거나 형식이 안 맞는 경우 (로컬 파일로 폴백 시도)
                 else:
                     available_keys = list(st.secrets.keys()) if hasattr(st, 'secrets') else "None"
-                    raise ValueError(f"키를 찾을 수 없습니다. 현재 인식된 키 목록: {available_keys}")
+                    print(f"⚠️ No Firebase keys found in Secrets. Available: {available_keys}")
+                    cred = None  # 로컬 파일로 폴백
                 
                 if cred:
                     firebase_admin.initialize_app(cred)
