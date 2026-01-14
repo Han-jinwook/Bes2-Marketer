@@ -1362,7 +1362,61 @@ with tab4:
     else:
         st.warning("❌ 쿠키 파일 없음 - 자막 추출 시 IP 차단 가능성 있음")
     
-    # 쿠키 입력/저장
+    # 🔥 자동 쿠키 추출 (원클릭)
+    st.markdown("##### 🚀 자동 쿠키 추출 (원클릭)")
+    st.caption("Chrome 브라우저에서 자동으로 YouTube 쿠키를 추출합니다 (Chrome 종료 필요)")
+    
+    col_auto, col_help = st.columns([3, 1])
+    
+    with col_auto:
+        if st.button("🎯 Chrome 쿠키 자동 추출", type="primary", use_container_width=True):
+            with st.spinner("Chrome 쿠키 추출 중..."):
+                try:
+                    from cookie_extractor import extract_youtube_cookies, save_cookies_to_file
+                    
+                    # 자동 추출
+                    cookies_txt = extract_youtube_cookies()
+                    
+                    if cookies_txt:
+                        # 저장
+                        if save_cookies_to_file(cookies_txt, cookies_path):
+                            st.success("✅ 쿠키 자동 추출 & 저장 완료!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("쿠키 저장 실패")
+                    else:
+                        st.error("""
+                        ❌ 쿠키 추출 실패
+                        
+                        **해결 방법:**
+                        1. Chrome을 완전히 종료하세요
+                        2. YouTube에 로그인되어 있는지 확인하세요
+                        3. 다시 시도하세요
+                        
+                        또는 아래 수동 방법을 사용하세요.
+                        """)
+                except ImportError:
+                    st.error("cookie_extractor 모듈 로드 실패")
+                except Exception as e:
+                    st.error(f"쿠키 추출 중 오류: {e}")
+    
+    with col_help:
+        with st.popover("❓ 도움말"):
+            st.markdown("""
+            **Chrome 종료 방법:**
+            1. Chrome 모든 창 닫기
+            2. 작업 관리자에서 Chrome 프로세스 종료
+            
+            **왜 종료해야 하나요?**
+            - Chrome이 쿠키 DB를 잠그고 있어서
+            - 종료해야 읽을 수 있음
+            """)
+    
+    st.markdown("---")
+    
+    # 수동 쿠키 입력 (대안)
     with st.expander("🔧 쿠키 추출 & 저장", expanded=not has_cookies):
         st.markdown("""
         **쿠키 추출 방법:**
