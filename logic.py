@@ -368,12 +368,22 @@ class YouTubeHunter:
         languages: list[str] = ["ko", "en"]
     ) -> Optional[str]:
         """
-        영상 자막 추출 (IP 차단 우회 강화)
-        Method 1: youtube-transcript-api (User-Agent 스푸핑)
-        Method 2: yt-dlp (IP 차단 우회, 느림)
+        영상 자막 추출 (쿠키 주입으로 IP 차단 완벽 우회)
+        Method 1: youtube-transcript-api (cookies.txt)
+        Method 2: yt-dlp (cookies.txt + User-Agent)
         """
         import time
         import random
+        import os
+        
+        # 쿠키 파일 경로 확인
+        cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+        has_cookies = os.path.exists(cookies_path)
+        
+        if has_cookies:
+            print(f"   🍪 Found cookies.txt - Using for IP bypass")
+        else:
+            print(f"   ℹ️ No cookies.txt - May face IP blocking (See COOKIE_GUIDE.md)")
         
         # 봇 차단 우회용 User-Agent
         user_agents = [
@@ -382,7 +392,7 @@ class YouTubeHunter:
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
         
-        # Method 1: youtube-transcript-api (User-Agent 스푸핑)
+        # Method 1: youtube-transcript-api (쿠키 주입)
         for attempt in range(2):  # 2번 재시도
             try:
                 print(f"[Transcript] Method 1 (Attempt {attempt + 1}): youtube-transcript-api for {video_id}...")
@@ -393,14 +403,12 @@ class YouTubeHunter:
                     print(f"   ⏳ Waiting {delay:.1f}s before retry...")
                     time.sleep(delay)
                 
-                # User-Agent 스푸핑으로 봇 차단 우회
-                import requests
-                session = requests.Session()
-                session.headers.update({'User-Agent': random.choice(user_agents)})
-                
-                # youtube-transcript-api는 내부적으로 requests 사용하지 않아서 우회 어려움
-                # 직접 API 호출로 변경
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                # 쿠키 사용
+                if has_cookies:
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
+                else:
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                    
                 transcript = None
 
                 # 우선순위 언어 시도
@@ -433,7 +441,7 @@ class YouTubeHunter:
                 if attempt == 1:  # 마지막 시도
                     print(f"   → Moving to Method 2...")
 
-        # Method 2: yt-dlp (IP 차단 우회 + User-Agent)
+        # Method 2: yt-dlp (쿠키 + User-Agent)
         try:
             print(f"[Transcript] Method 2: yt-dlp (IP bypass) for {video_id}...")
             import yt_dlp
@@ -450,6 +458,11 @@ class YouTubeHunter:
                 'no_warnings': True,
                 'user_agent': random.choice(user_agents),  # User-Agent 스푸핑
             }
+            
+            # 쿠키 주입
+            if has_cookies:
+                ydl_opts['cookiefile'] = cookies_path
+                print(f"   🍪 Using cookies for yt-dlp")
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
@@ -482,7 +495,7 @@ class YouTubeHunter:
         except Exception as e:
             print(f"   ❌ Method 2 (yt-dlp) failed: {e}")
             
-        print(f"   ❌ All methods failed for {video_id} (Possible IP block)")
+        print(f"   ❌ All methods failed for {video_id} (Possible IP block - Try adding cookies.txt)")
         return None
     
     def _parse_subtitle_text(self, subtitle_content: str) -> str:
