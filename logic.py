@@ -375,15 +375,30 @@ class YouTubeHunter:
         import time
         import random
         import os
+        import tempfile
         
-        # 쿠키 파일 경로 확인
+        # 쿠키 파일 경로 확인 (로컬 + Streamlit Cloud 지원)
         cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
         has_cookies = os.path.exists(cookies_path)
         
+        # Streamlit Cloud: Secrets에서 쿠키 로드
+        if not has_cookies:
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and 'YOUTUBE_COOKIES' in st.secrets:
+                    # 임시 파일로 쿠키 저장
+                    cookies_path = os.path.join(tempfile.gettempdir(), 'youtube_cookies.txt')
+                    with open(cookies_path, 'w', encoding='utf-8') as f:
+                        f.write(st.secrets['YOUTUBE_COOKIES'])
+                    has_cookies = True
+                    print(f"   🍪 Loaded cookies from Streamlit Secrets")
+            except:
+                pass
+        
         if has_cookies:
-            print(f"   🍪 Found cookies.txt - Using for IP bypass")
+            print(f"   🍪 Using cookies for IP bypass")
         else:
-            print(f"   ℹ️ No cookies.txt - May face IP blocking (See COOKIE_GUIDE.md)")
+            print(f"   ℹ️ No cookies - May face IP blocking")
         
         # 봇 차단 우회용 User-Agent
         user_agents = [

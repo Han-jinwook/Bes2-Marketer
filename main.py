@@ -1330,7 +1330,8 @@ with tab4:
     
     # 현재 쿠키 상태 확인
     import os
-    cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+    # 절대 경로 사용 (Streamlit에서 __file__ 신뢰성 낮음)
+    cookies_path = os.path.join(os.getcwd(), 'cookies.txt')
     has_cookies = os.path.exists(cookies_path)
     
     if has_cookies:
