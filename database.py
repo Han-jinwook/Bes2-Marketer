@@ -1,7 +1,16 @@
+# -*- coding: utf-8 -*-
 """
 Firebase Firestore Database Manager
 Supabase에서 Firebase로 마이그레이션 (2026-01-13)
 """
+
+import sys
+import io
+
+# Windows에서 UTF-8 출력 강제
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 import firebase_admin
 from firebase_admin import credentials, firestore
