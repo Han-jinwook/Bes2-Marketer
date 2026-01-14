@@ -1324,7 +1324,94 @@ with tab4:
     
     st.markdown("---")
     
-    # 4. Gemini 모델 작동 테스트
+    # 4. 쿠키 관리 (Cookie Manager)
+    st.markdown("#### 🍪 YouTube 쿠키 관리")
+    st.caption("IP 차단을 우회하여 자막을 안정적으로 추출하기 위한 쿠키 설정")
+    
+    # 현재 쿠키 상태 확인
+    import os
+    cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+    has_cookies = os.path.exists(cookies_path)
+    
+    if has_cookies:
+        # 쿠키 파일 정보 표시
+        cookie_mtime = os.path.getmtime(cookies_path)
+        cookie_date = datetime.fromtimestamp(cookie_mtime).strftime('%Y-%m-%d %H:%M')
+        st.success(f"✅ 쿠키 파일 존재 (마지막 수정: {cookie_date})")
+        
+        col_test, col_delete = st.columns(2)
+        
+        with col_test:
+            if st.button("🧪 쿠키 유효성 테스트", use_container_width=True):
+                with st.spinner("테스트 중..."):
+                    from logic import YouTubeHunter
+                    hunter = YouTubeHunter()
+                    # 테스트용 유명한 영상 (자막 있음)
+                    test_result = hunter.get_transcript("dQw4w9WgXcQ")  # Rick Astley
+                    
+                    if test_result:
+                        st.success("✅ 쿠키 정상 작동! 자막 추출 성공")
+                    else:
+                        st.warning("⚠️ 자막 추출 실패 - 쿠키 갱신 필요")
+        
+        with col_delete:
+            if st.button("🗑️ 쿠키 삭제", use_container_width=True):
+                os.remove(cookies_path)
+                st.success("✅ 쿠키 파일 삭제됨")
+                st.rerun()
+    else:
+        st.warning("❌ 쿠키 파일 없음 - 자막 추출 시 IP 차단 가능성 있음")
+    
+    # 쿠키 입력/저장
+    with st.expander("🔧 쿠키 추출 & 저장", expanded=not has_cookies):
+        st.markdown("""
+        **쿠키 추출 방법:**
+        
+        1. **YouTube 접속 & 로그인**
+           - https://youtube.com 접속
+           - 본인 계정으로 로그인
+        
+        2. **개발자 도구 열기** (F12)
+        
+        3. **쿠키 복사**
+           - Application → Cookies → https://youtube.com
+           - 필요한 쿠키들을 아래 형식으로 복사:
+        
+        ```
+        # Netscape HTTP Cookie File
+        .youtube.com	TRUE	/	TRUE	0	VISITOR_INFO1_LIVE	[값]
+        .youtube.com	TRUE	/	TRUE	0	YSC	[값]
+        ```
+        
+        **또는 Chrome 확장 프로그램 사용:**
+        - "Get cookies.txt LOCALLY" 설치
+        - YouTube에서 Export 클릭
+        - 내용 복사
+        """)
+        
+        cookie_content = st.text_area(
+            "쿠키 내용 붙여넣기",
+            height=150,
+            placeholder="# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tVISITOR_INFO1_LIVE\t[your_value]\n..."
+        )
+        
+        if st.button("💾 쿠키 저장", type="primary", use_container_width=True):
+            if cookie_content.strip():
+                try:
+                    with open(cookies_path, 'w', encoding='utf-8') as f:
+                        f.write(cookie_content)
+                    st.success("✅ 쿠키 저장 완료!")
+                    st.balloons()
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"쿠키 저장 실패: {e}")
+            else:
+                st.warning("쿠키 내용을 입력해주세요!")
+    
+    st.markdown("---")
+    
+    # 5. Gemini 모델 작동 테스트
     st.markdown("#### 🤖 AI 모델 테스트")
     st.caption("현재 사용 가능한 Gemini 모델을 확인합니다.")
     
