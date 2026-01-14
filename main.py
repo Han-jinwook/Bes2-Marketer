@@ -351,10 +351,20 @@ with st.sidebar:
 
                         
                         for video in videos:
-                            # 검색 단계에서는 메타데이터만 수집 (자막은 분석 단계에서)
-                            # 자막 추출이 느리고 실패할 수 있어서 검색 속도 향상을 위해 제거
-                            video["transcript_text"] = ""  # 빈 값으로 초기화
-                            video["content_source"] = "not_fetched"
+                            # 자막 추출 (쿠키 사용으로 IP 차단 우회)
+                            try:
+                                transcript = hunter.get_transcript(video["video_id"])
+                                if transcript:
+                                    video["transcript_text"] = transcript
+                                    video["content_source"] = "transcript"
+                                else:
+                                    # 자막 없으면 설명글 사용
+                                    video["transcript_text"] = video.get("description", "")
+                                    video["content_source"] = "description"
+                            except Exception as e:
+                                print(f"Transcript extraction failed for {video['video_id']}: {e}")
+                                video["transcript_text"] = video.get("description", "")
+                                video["content_source"] = "description"
                             
                             # 채널 정보
                             channel_info = hunter.get_channel_info(video["channel_id"])
