@@ -583,18 +583,31 @@ except Exception as e:
             return []
     
     def get_pending_email_drafts(self) -> List[Dict]:
-        """대기 중인 이메일 초안 조회 (status='pending')"""
+        """대기 중인 이메일 초안 조회 (status='generated' 또는 'pending')"""
         try:
             if not self.db:
                 return []
             
-            drafts_ref = self.db.collection('drafts').where('status', '==', 'pending')
+            # Status가 'generated' 또는 'pending'인 것 조회
+            drafts_ref = self.db.collection('drafts').where('status', '==', 'generated')
             docs = drafts_ref.stream()
             
             drafts = []
             for doc in docs:
                 draft_data = doc.to_dict()
                 draft_data['id'] = doc.id
+                
+                # 필드명 매핑 (UI 호환성)
+                if 'draft_content' in draft_data:
+                    draft_data['content'] = draft_data['draft_content']
+                
+                # Lead 정보 구성 (UI 기대 형식)
+                draft_data['leads'] = {
+                    'id': draft_data.get('lead_id'),
+                    'email': draft_data.get('email'),
+                    'channel_name': draft_data.get('channel_name')
+                }
+                
                 drafts.append(draft_data)
             
             return drafts
