@@ -1392,9 +1392,26 @@ with tab4:
                         # 저장
                         if save_cookies_to_file(cookies_txt, cookies_path):
                             st.success("✅ 쿠키 자동 추출 & 저장 완료!")
+                            
+                            # ⭐ Streamlit Cloud Secrets 형식 출력
+                            st.markdown("---")
+                            st.markdown("#### 📋 Streamlit Cloud Secrets에 추가할 내용")
+                            st.caption("아래 내용을 복사해서 Streamlit Cloud → Settings → Secrets에 붙여넣으세요")
+                            
+                            secrets_format = f"YOUTUBE_COOKIES = '''\n{cookies_txt.strip()}\n'''"
+                            
+                            st.code(secrets_format, language="toml")
+                            
+                            st.info("""
+                            **설정 방법:**
+                            1. https://share.streamlit.io 접속
+                            2. Bes2-Marketer 앱 선택  
+                            3. Settings → Secrets 클릭
+                            4. 위 내용을 기존 내용 **아래에** 추가
+                            5. Save 클릭
+                            """)
+                            
                             st.balloons()
-                            time.sleep(1)
-                            st.rerun()
                         else:
                             st.error("쿠키 저장 실패")
                     else:
