@@ -861,7 +861,7 @@ with tab2:
     st.markdown("### ✉️ 이메일 발송 관리")
     
     # 1. 대기 중인 초안 로드
-    pending_drafts = db.get_pending_email_drafts_detailed()
+    pending_drafts = db.get_pending_email_drafts()
     
 
     if not pending_drafts:
