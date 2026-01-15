@@ -557,6 +557,98 @@ except Exception as e:
     """)
     st.stop()
 
+    
+    # =============================================
+    # Draft Management (이메일 초안 관리)
+    # =============================================
+    
+    def get_all_drafts(self, limit: int = 100) -> List[Dict]:
+        """모든 이메일 초안 조회"""
+        try:
+            if not self.db:
+                return []
+            
+            drafts_ref = self.db.collection('drafts').limit(limit).order_by('created_at', direction=firestore.Query.DESCENDING)
+            docs = drafts_ref.stream()
+            
+            drafts = []
+            for doc in docs:
+                draft_data = doc.to_dict()
+                draft_data['id'] = doc.id
+                drafts.append(draft_data)
+            
+            return drafts
+        except Exception as e:
+            print(f"Error getting all drafts: {e}")
+            return []
+    
+    def get_pending_email_drafts(self) -> List[Dict]:
+        """대기 중인 이메일 초안 조회 (status='pending')"""
+        try:
+            if not self.db:
+                return []
+            
+            drafts_ref = self.db.collection('drafts').where('status', '==', 'pending')
+            docs = drafts_ref.stream()
+            
+            drafts = []
+            for doc in docs:
+                draft_data = doc.to_dict()
+                draft_data['id'] = doc.id
+                drafts.append(draft_data)
+            
+            return drafts
+        except Exception as e:
+            print(f"Error getting pending drafts: {e}")
+            return []
+    
+    def save_draft(self, draft_data: Dict) -> Optional[str]:
+        """이메일 초안 저장"""
+        try:
+            if not self.db:
+                return None
+            
+            # created_at 추가
+            if 'created_at' not in draft_data:
+                draft_data['created_at'] = datetime.utcnow().isoformat()
+            
+            # status 기본값
+            if 'status' not in draft_data:
+                draft_data['status'] = 'pending'
+            
+            doc_ref = self.db.collection('drafts').add(draft_data)
+            return doc_ref[1].id
+        except Exception as e:
+            print(f"Error saving draft: {e}")
+            return None
+    
+    def delete_draft(self, draft_id: str) -> bool:
+        """이메일 초안 삭제"""
+        try:
+            if not self.db:
+                return False
+            
+            self.db.collection('drafts').document(draft_id).delete()
+            return True
+        except Exception as e:
+            print(f"Error deleting draft: {e}")
+            return False
+    
+    def update_draft_status(self, draft_id: str, status: str) -> bool:
+        """이메일 초안 상태 업데이트"""
+        try:
+            if not self.db:
+                return False
+            
+            self.db.collection('drafts').document(draft_id).update({
+                'status': status,
+                'updated_at': datetime.utcnow().isoformat()
+            })
+            return True
+        except Exception as e:
+            print(f"Error updating draft status: {e}")
+            return False
+
 # test_connection 함수 (하위 호환성 유지)
 def test_connection():
     """Firebase 연결 테스트 (레거시 호환)"""
