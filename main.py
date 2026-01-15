@@ -1350,7 +1350,7 @@ with tab4:
         cookie_date = datetime.fromtimestamp(cookie_mtime).strftime('%Y-%m-%d %H:%M')
         st.success(f"✅ 쿠키 파일 존재 (마지막 수정: {cookie_date})")
         
-        col_test, col_delete = st.columns(2)
+        col_test, col_secrets, col_delete = st.columns(3)
         
         with col_test:
             if st.button("🧪 쿠키 유효성 테스트", use_container_width=True):
@@ -1364,6 +1364,29 @@ with tab4:
                         st.success("✅ 쿠키 정상 작동! 자막 추출 성공")
                     else:
                         st.warning("⚠️ 자막 추출 실패 - 쿠키 갱신 필요")
+        
+        with col_secrets:
+            if st.button("📋 Secrets 형식 보기", use_container_width=True):
+                # 쿠키 파일 읽기
+                with open(cookies_path, 'r', encoding='utf-8') as f:
+                    cookies_content = f.read()
+                
+                st.markdown("---")
+                st.markdown("#### 📋 Streamlit Cloud Secrets에 추가할 내용")
+                st.caption("아래 내용을 복사해서 Streamlit Cloud → Settings → Secrets에 붙여넣으세요")
+                
+                secrets_format = f"YOUTUBE_COOKIES = '''\n{cookies_content.strip()}\n'''"
+                
+                st.code(secrets_format, language="toml")
+                
+                st.info("""
+                **설정 방법:**
+                1. https://share.streamlit.io 접속
+                2. Bes2-Marketer 앱 선택  
+                3. Settings → Secrets 클릭
+                4. 위 내용을 기존 내용 **아래에** 추가
+                5. Save 클릭
+                """)
         
         with col_delete:
             if st.button("🗑️ 쿠키 삭제", use_container_width=True):
@@ -1444,52 +1467,6 @@ with tab4:
     
     st.markdown("---")
     
-    # 수동 쿠키 입력 (대안)
-    with st.expander("🔧 쿠키 추출 & 저장", expanded=not has_cookies):
-        st.markdown("""
-        **쿠키 추출 방법:**
-        
-        1. **YouTube 접속 & 로그인**
-           - https://youtube.com 접속
-           - 본인 계정으로 로그인
-        
-        2. **개발자 도구 열기** (F12)
-        
-        3. **쿠키 복사**
-           - Application → Cookies → https://youtube.com
-           - 필요한 쿠키들을 아래 형식으로 복사:
-        
-        ```
-        # Netscape HTTP Cookie File
-        .youtube.com	TRUE	/	TRUE	0	VISITOR_INFO1_LIVE	[값]
-        .youtube.com	TRUE	/	TRUE	0	YSC	[값]
-        ```
-        
-        **또는 Chrome 확장 프로그램 사용:**
-        - "Get cookies.txt LOCALLY" 설치
-        - YouTube에서 Export 클릭
-        - 내용 복사
-        """)
-        
-        cookie_content = st.text_area(
-            "쿠키 내용 붙여넣기",
-            height=150,
-            placeholder="# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tVISITOR_INFO1_LIVE\t[your_value]\n..."
-        )
-        
-        if st.button("💾 쿠키 저장", type="primary", use_container_width=True):
-            if cookie_content.strip():
-                try:
-                    with open(cookies_path, 'w', encoding='utf-8') as f:
-                        f.write(cookie_content)
-                    st.success("✅ 쿠키 저장 완료!")
-                    st.balloons()
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"쿠키 저장 실패: {e}")
-            else:
-                st.warning("쿠키 내용을 입력해주세요!")
     
     st.markdown("---")
     
