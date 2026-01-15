@@ -2,6 +2,9 @@
 .env
 firebase-key.json
 
+# 쿠키 (보안!)
+cookies.txt
+
 # Python
 __pycache__/
 *.py[cod]
