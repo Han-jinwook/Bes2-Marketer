@@ -630,6 +630,7 @@ with tab1:
                 status_area = st.empty()
                 
                 success_count = 0
+                fail_count = 0
                 
                 for idx, row in enumerate(selected_rows.itertuples()):
                         vid = row.video_id
@@ -712,6 +713,7 @@ with tab1:
                                         content += " (내용 부족)"
 
                                 # 2. AI 생성 (이메일, 댓글, 요약) with validation
+                                generation_status = 'generated'
                                 try:
                                     email = copywriter.generate_email(
                                         channel_name=video["channel_name"],
@@ -736,11 +738,12 @@ with tab1:
                                         
                                 except Exception as ai_error:
                                     print(f"AI generation error for {vid}: {ai_error}")
-                                    status_area.error(f"❌ AI 생성 실패: {ai_error}")
-                                    # AI 실패 시 기본값 사용
-                                    email = f"안녕하세요, {video['channel_name']}님!\n\n영상 '{video['title']}'를 잘 봤습니다.\n\n(자동 생성 실패 - 수동 작성 필요)"
-                                    comment = "좋은 영상 감사합니다!"
-                                    summary = content[:200] if content else "요약 없음"
+                                    status_area.error(f"❌ AI 생성 실패: {str(ai_error)}")
+                                    generation_status = 'error'
+                                    # AI 실패 시 에러 내용 저장
+                                    email = f"[AI 에러] 상세 내용: {str(ai_error)}"
+                                    comment = "[AI 에러]"
+                                    summary = f"분석 실패: {str(ai_error)}"
                                 
                                 relevance = {"score": 100} # 기본값
                                 
@@ -805,7 +808,7 @@ with tab1:
                                     channel_name=video["channel_name"],
                                     video_title=video["title"],
                                     draft_content=email,
-                                    status='generated',
+                                    status=generation_status,
                                     email=(video.get("channel_info") or {}).get("email"),
                                     lead_id=lead_id
                                 )
@@ -818,7 +821,7 @@ with tab1:
                                     channel_name=video["channel_name"],
                                     video_title=f"[댓글] {video['title']}",
                                     draft_content=comment,
-                                    status='generated',
+                                    status=generation_status,
                                     lead_id=lead_id
                                 )
                                 
@@ -831,7 +834,11 @@ with tab1:
                                     "relevance": relevance,
                                     "db_id": email_draft["id"]
                                 }
-                                success_count += 1
+                                
+                                if generation_status == 'generated':
+                                    success_count += 1
+                                else:
+                                    fail_count += 1
                                 
                         except Exception as e:
                             import traceback
@@ -843,8 +850,13 @@ with tab1:
                             
                 status_area.empty()
                 if success_count > 0:
-                    st.success(f"✅ 총 {success_count}개 영상 분석 완료! \n\n👉 **'✉️ 이메일 발송 관리'** 탭으로 이동하여 초안을 확인하세요.")
-                    st.balloons()
+                    if fail_count > 0:
+                        st.warning(f"⚠️ 부분 완료: {success_count}개 성공, {fail_count}개 실패. \n\n👉 **'✉️ 이메일 발송 관리'** 탭에서 확인하세요.")
+                    else:
+                        st.success(f"✅ 총 {success_count}개 영상 분석 완료! \n\n👉 **'✉️ 이메일 발송 관리'** 탭에서 확인하세요.")
+                        st.balloons()
+                elif fail_count > 0:
+                    st.error(f"❌ 분석 실패: 총 {fail_count}개 영상 분석에 실패했습니다. (AI 모델 오류 등)")
                 else:
                     st.warning("⚠️ 분석된 영상이 없습니다.")
 
