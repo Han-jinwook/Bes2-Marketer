@@ -537,8 +537,8 @@ class AICopywriter:
     def __init__(self):
         try:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Gemini 1.5 Flash (가성비 + 속도) - Updated 2026-01-11
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            # Gemini 2.0 Flash (최신 모델 - 2026.01 확인됨)
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
         except Exception as e:
             print(f"Warning: Failed to initialize Gemini API: {e}")
             self.model = None
