@@ -281,11 +281,32 @@ class Database:
             return False
 
     def get_pending_email_drafts(self):
-        """대기 중인 이메일 초안 조회"""
+        """대기 중인 이메일 초안 조회 (UI 호환성 보장)"""
         try:
             # status가 'generated'인 초안 조회
             docs = self.drafts_ref.where('status', '==', 'generated').stream()
-            return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+            
+            drafts = []
+            for doc in docs:
+                data = doc.to_dict()
+                d_id = doc.id
+                
+                # 1. content 매핑 (UI는 'content'를 기대, DB는 'draft_content')
+                if 'draft_content' in data:
+                    data['content'] = data['draft_content']
+                
+                # 2. leads 객체 구성 (UI는 'leads.channel_name' 등을 기대)
+                # DB에는 channel_name, email, lead_id가 평문으로 저장됨.
+                if 'leads' not in data:
+                    data['leads'] = {
+                        'channel_name': data.get('channel_name', 'Unknown'),
+                        'email': data.get('email'),
+                        'id': data.get('lead_id')
+                    }
+                
+                drafts.append({"id": d_id, **data})
+                
+            return drafts
         except Exception as e:
             print(f"Error getting pending drafts: {e}")
             return []
@@ -364,6 +385,18 @@ class Database:
             return True
         except Exception as e:
             print(f"Error deleting draft {draft_id}: {e}")
+            return False
+
+    def update_draft_status(self, draft_id: str, status: str) -> bool:
+        """이메일 초안 상태 업데이트"""
+        try:
+            self.drafts_ref.document(draft_id).update({
+                'status': status,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+            return True
+        except Exception as e:
+            print(f"Error updating draft status: {e}")
             return False
 
 
@@ -536,131 +569,6 @@ except Exception as e:
     
     st.info("👇 **해결 방법: Streamlit Secrets 설정을 확인해주세요**")
     
-    st.markdown("""
-    **Streamlit Cloud 대시보드 -> App Settings -> Secrets** 탭에 아래 형식이 맞는지 확인하세요:
-    
-    ```toml
-    [firebase]
-    type = "service_account"
-    project_id = "..."
-    private_key_id = "..."
-    private_key = "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
-    client_email = "..."
-    client_id = "..."
-    ...
-    
-    YOUTUBE_API_KEY = "..."
-    GEMINI_API_KEY = "..."
-    ```
-    
-    **주의:** `private_key` 값에 줄바꿈(`\\n`)이 정확히 포함되어 있어야 합니다. JSON 파일 내용을 복사할 때 주의하세요.
-    """)
-    st.stop()
-
-    
-    # =============================================
-    # Draft Management (이메일 초안 관리)
-    # =============================================
-    
-    def get_all_drafts(self, limit: int = 100) -> List[Dict]:
-        """모든 이메일 초안 조회"""
-        try:
-            if not self.db:
-                return []
-            
-            drafts_ref = self.db.collection('drafts').limit(limit).order_by('created_at', direction=firestore.Query.DESCENDING)
-            docs = drafts_ref.stream()
-            
-            drafts = []
-            for doc in docs:
-                draft_data = doc.to_dict()
-                draft_data['id'] = doc.id
-                drafts.append(draft_data)
-            
-            return drafts
-        except Exception as e:
-            print(f"Error getting all drafts: {e}")
-            return []
-    
-    def get_pending_email_drafts(self) -> List[Dict]:
-        """대기 중인 이메일 초안 조회 (status='generated' 또는 'pending')"""
-        try:
-            if not self.db:
-                return []
-            
-            # Status가 'generated' 또는 'pending'인 것 조회
-            drafts_ref = self.db.collection('drafts').where('status', '==', 'generated')
-            docs = drafts_ref.stream()
-            
-            drafts = []
-            for doc in docs:
-                draft_data = doc.to_dict()
-                draft_data['id'] = doc.id
-                
-                # 필드명 매핑 (UI 호환성)
-                if 'draft_content' in draft_data:
-                    draft_data['content'] = draft_data['draft_content']
-                
-                # Lead 정보 구성 (UI 기대 형식)
-                draft_data['leads'] = {
-                    'id': draft_data.get('lead_id'),
-                    'email': draft_data.get('email'),
-                    'channel_name': draft_data.get('channel_name')
-                }
-                
-                drafts.append(draft_data)
-            
-            return drafts
-        except Exception as e:
-            print(f"Error getting pending drafts: {e}")
-            return []
-    
-    def save_draft(self, draft_data: Dict) -> Optional[str]:
-        """이메일 초안 저장"""
-        try:
-            if not self.db:
-                return None
-            
-            # created_at 추가
-            if 'created_at' not in draft_data:
-                draft_data['created_at'] = datetime.utcnow().isoformat()
-            
-            # status 기본값
-            if 'status' not in draft_data:
-                draft_data['status'] = 'pending'
-            
-            doc_ref = self.db.collection('drafts').add(draft_data)
-            return doc_ref[1].id
-        except Exception as e:
-            print(f"Error saving draft: {e}")
-            return None
-    
-    def delete_draft(self, draft_id: str) -> bool:
-        """이메일 초안 삭제"""
-        try:
-            if not self.db:
-                return False
-            
-            self.db.collection('drafts').document(draft_id).delete()
-            return True
-        except Exception as e:
-            print(f"Error deleting draft: {e}")
-            return False
-    
-    def update_draft_status(self, draft_id: str, status: str) -> bool:
-        """이메일 초안 상태 업데이트"""
-        try:
-            if not self.db:
-                return False
-            
-            self.db.collection('drafts').document(draft_id).update({
-                'status': status,
-                'updated_at': datetime.utcnow().isoformat()
-            })
-            return True
-        except Exception as e:
-            print(f"Error updating draft status: {e}")
-            return False
 
 # test_connection 함수 (하위 호환성 유지)
 def test_connection():
