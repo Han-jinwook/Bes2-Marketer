@@ -532,16 +532,52 @@ class YouTubeHunter:
 # =============================================
 
 class AICopywriter:
-    """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성"""
+    """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성 (Multi-Model Support)"""
+    
+    # 무료 티어에서 사용 가능한 모델 리스트 (우선순위 순)
+    AVAILABLE_MODELS = [
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-2.0-flash-lite-preview-02-05',
+        'gemini-2.0-flash-exp'
+    ]
     
     def __init__(self):
         try:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Gemini 2.0 Flash (최신 모델 - 2026.01 확인됨)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.api_ready = True
         except Exception as e:
             print(f"Warning: Failed to initialize Gemini API: {e}")
-            self.model = None
+            self.api_ready = False
+
+    def _generate_with_retry(self, prompt: str) -> str:
+        """여러 모델을 순회하며 생성 시도 (Fallback Logic)"""
+        if not self.api_ready:
+            raise Exception("Gemini API Key가 설정되지 않았거나 초기화에 실패했습니다.")
+
+        last_error = None
+        
+        for model_name in self.AVAILABLE_MODELS:
+            try:
+                # 모델 동적 로드
+                model = genai.GenerativeModel(model_name)
+                # print(f"🤖 Trying model: {model_name}...") 
+                
+                response = model.generate_content(prompt)
+                
+                if response.text:
+                    # 성공 시 바로 반환
+                    # print(f"✅ Success with {model_name}")
+                    return response.text.strip()
+                    
+            except Exception as e:
+                # print(f"⚠️ Failed with {model_name}: {e}")
+                last_error = e
+                continue # 다음 모델 시도
+        
+        # 모든 모델 실패 시
+        raise Exception(f"All models failed. Last error: {last_error}")
 
     def analyze_video(self, video_data: dict, transcript: str) -> dict:
         """영상 내용 분석 (Legacy support)"""
@@ -564,10 +600,9 @@ class AICopywriter:
         3. ...
         '''
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
-        except Exception:
-            return "요약 실패"
+            return self._generate_with_retry(prompt)
+        except Exception as e:
+            return f"요약 실패 (AI Error: {str(e)})"
 
     def generate_email(self, channel_name: str, video_title: str, video_content: str, subscriber_count: int) -> str:
         """제휴 제안 이메일 생성 (Bes2 철학 반영)"""
@@ -599,8 +634,7 @@ class AICopywriter:
         '''
         
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            return self._generate_with_retry(prompt)
         except Exception as e:
             return f"[AI 에러] 이메일 생성 실패: {str(e)}"
 
@@ -626,8 +660,7 @@ class AICopywriter:
         '''
         
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            return self._generate_with_retry(prompt)
         except Exception as e:
             return f"[AI 에러] 댓글 생성 실패: {str(e)}"
 
