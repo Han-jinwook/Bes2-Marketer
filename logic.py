@@ -535,10 +535,10 @@ class AICopywriter:
     """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성 (Multi-Model Support)"""
     
     AVAILABLE_MODELS = [
-        'gemini-2.0-flash',           # 메인 (Stable)
-        'gemini-2.0-flash-lite',      # 백업 1 (Lightweight)
-        'gemini-flash-latest',        # 백업 2 (Latest Flash)
-        'gemini-2.0-flash-exp'        # 백업 3 (Quota 찼을 수 있음)
+        'gemini-2.0-flash-lite',      # 1순위: 가장 가볍고 빠름 (트래픽 적음)
+        'gemini-2.0-flash',           # 2순위: 메인 (Stable)
+        'gemini-flash-latest',        # 3순위: 백업
+        'gemini-2.0-flash-exp'        # 4순위: 최신 실험용
     ]
     
     def __init__(self):
@@ -550,7 +550,7 @@ class AICopywriter:
             self.api_ready = False
 
     def _generate_with_retry(self, prompt: str) -> str:
-        """여러 모델을 순회하며 생성 시도 (Fallback + Smart Retry Logic)"""
+        """여러 모델을 순회하며 생성 시도 (Fast Failover Logic)"""
         import time
         import random
         
@@ -560,36 +560,25 @@ class AICopywriter:
         last_error = None
         
         for model_name in self.AVAILABLE_MODELS:
-            # 429 에러 등을 대비해 모델별 최대 2회 시도
-            for attempt in range(2):
-                try:
-                    # 모델 동적 로드
-                    model = genai.GenerativeModel(model_name)
+            try:
+                # 모델 동적 로드
+                # print(f"🤖 Trying model: {model_name}...") 
+                model = genai.GenerativeModel(model_name)
+                
+                response = model.generate_content(prompt)
+                
+                if response.text:
+                    return response.text.strip()
                     
-                    response = model.generate_content(prompt)
-                    
-                    if response.text:
-                        return response.text.strip()
-                        
-                except Exception as e:
-                    error_str = str(e)
-                    last_error = e
-                    
-                    # 429 (Resource Exhausted) 에러일 경우: 잠시 대기 후 재시도
-                    if "429" in error_str or "quota" in error_str.lower():
-                        if attempt == 0: # 첫 번째 실패면 대기 후 재시도
-                            wait_time = random.uniform(20, 40) # 20~40초 랜덤 대기
-                            print(f"⏳ Quota limit hit on {model_name}. Waiting {wait_time:.1f}s...")
-                            time.sleep(wait_time)
-                            continue # 같은 모델 재시도
-                        else:
-                            # 두 번째도 실패면 다음 모델로 이동
-                            pass
-                    
-                    # 그 외 에러는 바로 다음 모델로 이동
-                    break 
+            except Exception as e:
+                # 에러 발생 시 대기 없이 즉시 다음 모델로 넘어감 (Speed Up)
+                error_str = str(e)
+                last_error = e
+                # print(f"⏩ Failed with {model_name}, switching immediately...")
+                continue 
         
-        # 모든 모델 실패 시
+        # 모든 모델 실패 시에만 잠시 대기 후 마지막 모델로 한 번 더 시도
+        time.sleep(2)
         raise Exception(f"All models failed. Last error: {last_error}")
 
     def analyze_video(self, video_data: dict, transcript: str) -> dict:
