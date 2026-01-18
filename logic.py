@@ -535,7 +535,10 @@ class AICopywriter:
     """Gemini AI를 이용한 영상 분석 및 마케팅 카피 작성 (Multi-Model Support)"""
     
     AVAILABLE_MODELS = [
-        'gemini-2.0-flash-exp'  # 테스트에서 유일하게 성공한 모델 (0.63s)
+        'gemini-2.0-flash',           # 메인 (Stable)
+        'gemini-2.0-flash-lite',      # 백업 1 (Lightweight)
+        'gemini-flash-latest',        # 백업 2 (Latest Flash)
+        'gemini-2.0-flash-exp'        # 백업 3 (Quota 찼을 수 있음)
     ]
     
     def __init__(self):
